@@ -1,0 +1,20 @@
+{
+  "posts": [
+    {
+      "id": 1,
+      "title": {
+        "rendered": "Tokyo Expat Housing Guide - Getting Started"
+      },
+      "content": {
+        "rendered": "<h1>Tokyo Expat Housing Guide - Getting Started</h1>\n<p>Welcome to our comprehensive guide on finding housing in Tokyo! This article will help you navigate the Tokyo real estate market.</p>\n<h2>Understanding Tokyo's Housing Market</h2>\n<p>Tokyo's housing market is unique and can be challenging for newcomers. Here are some key points to keep in mind:</p>\n<ul>\n<li><strong>Location matters</strong>: Proximity to train stations significantly affects prices</li>\n<li><strong>Size vs. Price</strong>: Tokyo apartments are generally smaller but well-designed</li>\n<li><strong>Key Money</strong>: Be prepared for initial costs including key money (礼金) and deposit (敷金)</li>\n</ul>\n<h2>Popular Areas</h2>\n<h3>Shibuya</h3>\n<p>Shibuya is one of Tokyo's most vibrant districts, perfect for young professionals.</p>\n<h3>Shinjuku</h3>\n<p>Shinjuku offers excellent transportation links and a mix of residential and commercial areas.</p>\n<h2>Tips for Foreigners</h2>\n<ol>\n<li><strong>Language</strong>: Many landlords prefer Japanese speakers, but this is changing</li>\n<li><strong>Guarantor</strong>: You may need a guarantor company</li>\n<li><strong>Documentation</strong>: Prepare all necessary documents in advance</li>\n</ol>\n<p>Good luck with your housing search!</p>\n"
+      },
+      "excerpt": {
+        "rendered": "\n# Tokyo Expat Housing Guide - Getting Started\n\nWelcome to our comprehensive guide on finding housing in Tokyo! This article will help you navigate th..."
+      },
+      "date": "2024-01-15",
+      "category": "Guide",
+      "featuredImage": "/tokyo.jpg",
+      "slug": "example-post"
+    }
+  ]
+}
