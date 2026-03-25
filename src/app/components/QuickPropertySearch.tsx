@@ -1,118 +1,183 @@
+import React, { useMemo, useRef, useState, useEffect, type RefObject } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, ChevronDown, SlidersHorizontal } from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { AREA_OPTIONS } from '@/lib/wards';
+import { Search, ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 import type { HeroSearchParams } from '@/lib/searchFilters';
-import { useLanguage } from '@/app/contexts/LanguageContext';
+import { WARD_NAMES } from '@/lib/wards';
 
-const AREA_DROPDOWN_MAX_HEIGHT = 380;
-
-interface DropdownOption {
+interface Option {
   value: string;
   label: string;
 }
 
-const propertyTypes = ['rent', 'buy'] as const;
-type PropertyType = typeof propertyTypes[number];
-
-/** Area: 東京23区＋23区外（QuickPropertySearch 用・複数選択） */
-const areas: DropdownOption[] = AREA_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }));
-
-/** Budget options for buy: value + i18n key */
-const buyBudgetKeys = [
-  { value: '0-50m', key: 'search.budget.under_50m' },
-  { value: '50m-80m', key: 'search.budget.50m_80m' },
-  { value: '80m-120m', key: 'search.budget.80m_120m' },
-  { value: '120m-200m', key: 'search.budget.120m_200m' },
-  { value: '200m+', key: 'search.budget.over_200m' },
+const quickCategories: Option[] = [
+  { value: 'bldg', label: 'ビル・マンション一棟' },
+  { value: 'room', label: 'マンション一室・フロア' },
+  { value: 'hotel', label: 'ホテル・旅館' },
+  { value: 'land', label: '土地・事業用地' },
+  { value: 'apartment', label: '収益アパート' },
+  { value: 'golf', label: 'ゴルフ場' },
+  { value: 'medical', label: '病院・医療施設' },
 ];
 
-/** Budget options for rent: value + i18n key */
-const rentBudgetKeys = [
-  { value: '0-150k', key: 'search.budget.under_150k' },
-  { value: '150k-250k', key: 'search.budget.150k_250k' },
-  { value: '250k-400k', key: 'search.budget.250k_400k' },
-  { value: '400k-600k', key: 'search.budget.400k_600k' },
-  { value: '600k+', key: 'search.budget.over_600k' },
+const quickRegions: Option[] = [
+  { value: 'tokyo23', label: '東京23区' },
+  { value: 'tokyo-other', label: '東京23区外' },
+  { value: 'osaka', label: '大阪' },
+  { value: 'kyoto', label: '京都' },
+  { value: 'domestic-other', label: 'その他国内' },
+  { value: 'overseas', label: '海外' },
 ];
 
-/** Bedroom options: value + i18n key */
-const bedroomKeys = [
-  { value: 'studio', key: 'search.bedrooms.studio' },
-  { value: '1br', key: 'search.bedrooms.1br' },
-  { value: '2br', key: 'search.bedrooms.2br' },
-  { value: '3br', key: 'search.bedrooms.3br' },
-  { value: '4br+', key: 'search.bedrooms.4br_plus' },
+const wardLabelMap: Record<string, string> = {
+  Chiyoda: '千代田区', Chuo: '中央区', Minato: '港区', Shinjuku: '新宿区', Bunkyo: '文京区',
+  Taito: '台東区', Sumida: '墨田区', Koto: '江東区', Shinagawa: '品川区', Meguro: '目黒区',
+  Ota: '大田区', Setagaya: '世田谷区', Shibuya: '渋谷区', Nakano: '中野区', Suginami: '杉並区',
+  Toshima: '豊島区', Kita: '北区', Arakawa: '荒川区', Itabashi: '板橋区', Nerima: '練馬区',
+  Adachi: '足立区', Katsushika: '葛飾区', Edogawa: '江戸川区',
+};
+
+const tokyo23WardOptions: Option[] = WARD_NAMES.map((name) => ({
+  value: name,
+  label: wardLabelMap[name] ?? name,
+}));
+
+const priceBands: Option[] = [
+  { value: 'up-to-10', label: '〜10億' },
+  { value: '10-50', label: '10〜50億' },
+  { value: '50-100', label: '50〜100億' },
+  { value: '100-plus', label: '100億以上' },
+  { value: 'negotiable', label: '価格応相談' },
 ];
 
-interface DropdownProps {
-  label: string;
-  options: DropdownOption[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}
+const updatedOptions: Option[] = [
+  { value: '1w', label: '1週間以内' },
+  { value: '1m', label: '1ヶ月以内' },
+  { value: '3m', label: '3ヶ月以内' },
+  { value: 'all', label: '全期間' },
+];
 
-function Dropdown({ label, options, value, onChange, placeholder }: DropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+const capRateOptions: Option[] = [
+  { value: 'up-to-5', label: '〜5%' },
+  { value: '5-7', label: '5〜7%' },
+  { value: '7-10', label: '7〜10%' },
+  { value: '10-plus', label: '10%以上' },
+  { value: 'none', label: '利回り情報なし' },
+];
 
+const buildingAgeOptions: Option[] = [
+  { value: 'new-5', label: '新築・築5年以内' },
+  { value: '6-10', label: '築6〜10年' },
+  { value: '11-20', label: '築11〜20年' },
+  { value: '21-30', label: '築21〜30年' },
+  { value: '31-plus', label: '築31年以上' },
+  { value: 'no-building', label: '建物なし（土地のみ）' },
+  { value: 'unknown', label: '築年不明' },
+];
+
+const rightsOptions: Option[] = [
+  { value: 'full-ownership', label: '所有権（完全所有）' },
+  { value: 'leasehold', label: '借地権（地上権・賃借権）' },
+  { value: 'bare-land', label: '底地（借地人あり）' },
+  { value: 'condo-ownership', label: '区分所有' },
+  { value: 'shared', label: '共有持分' },
+];
+
+const landTypeOptions: Option[] = [
+  { value: 'residential', label: '宅地' },
+  { value: 'farm', label: '田・畑（農地転用要）' },
+  { value: 'forest', label: '山林・原野' },
+  { value: 'misc', label: '雑種地' },
+  { value: 'other', label: 'その他' },
+];
+
+const zoningOptions: Option[] = [
+  { value: 'residential-low', label: '第一種低層住居専用地域' },
+  { value: 'residential-mid', label: '第一種中高層住居専用地域' },
+  { value: 'residential-1', label: '第一種住居地域' },
+  { value: 'semi-residential', label: '準住居地域' },
+  { value: 'neighborhood-commercial', label: '近隣商業地域' },
+  { value: 'commercial', label: '商業地域' },
+  { value: 'semi-industrial', label: '準工業地域' },
+  { value: 'industrial', label: '工業地域' },
+  { value: 'industrial-exclusive', label: '工業専用地域' },
+  { value: 'unspecified', label: '未指定' },
+];
+
+const planningOptions: Option[] = [
+  { value: 'urbanized', label: '市街化区域' },
+  { value: 'urbanization-control', label: '市街化調整区域' },
+  { value: 'non-zoned', label: '非線引き区域' },
+];
+
+const stationDistanceOptions: Option[] = [
+  { value: '1m', label: '徒歩1分以内' },
+  { value: '5m', label: '徒歩5分以内' },
+  { value: '10m', label: '徒歩10分以内' },
+  { value: 'bus', label: 'バス利用' },
+  { value: 'any', label: '指定なし' },
+];
+
+function useOutsideClose(ref: RefObject<HTMLDivElement | null>, onClose: () => void) {
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    const listener = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', listener);
+    return () => document.removeEventListener('mousedown', listener);
+  }, [ref, onClose]);
+}
 
-  const selectedOption = options.find(opt => opt.value === value);
+function MultiSelect({
+  label,
+  options,
+  values,
+  onChange,
+}: {
+  label: string;
+  options: Option[];
+  values: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  useOutsideClose(ref, () => setOpen(false));
+  const labelWithCount = values.length > 0 ? `${label} (${values.length})` : label;
+  const selectedText =
+    values.length === 0
+      ? '指定なし'
+      : options
+          .filter((o) => values.includes(o.value))
+          .map((o) => o.label)
+          .join(', ');
 
   return (
-    <div className="relative flex-1 min-w-0" ref={dropdownRef}>
-      <button
-        type="button"
-        className="w-full px-2 sm:px-4 py-2 md:py-3 text-left flex items-center justify-between gap-1 sm:gap-2 hover:bg-gray-50 transition-colors rounded-lg group"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] md:text-xs text-gray-500 mb-0.5 truncate">{label}</div>
-          <div className="text-xs md:text-sm text-gray-900 font-medium truncate">
-            {selectedOption ? selectedOption.label : placeholder}
-          </div>
-        </div>
-        <ChevronDown 
-          className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} 
-        />
-      </button>
-
+    <div className="relative" ref={ref}>
+      <label className="block">
+        <span className="mb-1 block text-xs text-gray-600">{labelWithCount}</span>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm flex items-center justify-between">
+          <span className="truncate">{selectedText}</span>
+          <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </label>
       <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden z-[100]"
-          >
-            {options.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`w-full px-4 py-2.5 text-left text-sm transition-colors ${
-                  value === option.value
-                    ? 'bg-[#C1121F]/5 text-[#C1121F] font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
-                }`}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-              >
-                {option.label}
-              </button>
-            ))}
+        {open && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="absolute z-[120] mt-2 w-full max-h-64 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg p-2">
+            {options.map((opt) => {
+              const checked = values.includes(opt.value);
+              return (
+                <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      if (checked) onChange(values.filter((v) => v !== opt.value));
+                      else onChange([...values, opt.value]);
+                    }}
+                  />
+                  <span>{opt.label}</span>
+                </label>
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
@@ -120,437 +185,271 @@ function Dropdown({ label, options, value, onChange, placeholder }: DropdownProp
   );
 }
 
-/** Area 用: 複数選択・チェックボックス・スクロール可能（areas は翻訳済みラベル） */
-interface AreaMultiSelectProps {
-  selectedAreas: Set<string>;
-  onChange: (selected: Set<string>) => void;
-  areas: DropdownOption[];
-}
-
-function AreaMultiSelect({ selectedAreas, onChange, areas }: AreaMultiSelectProps) {
-  const { t } = useLanguage();
-  const [isOpen, setIsOpen] = useState(false);
-  const [areaSearch, setAreaSearch] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) setAreaSearch('');
-  }, [isOpen]);
-
-  const toggle = (value: string) => {
-    const next = new Set(selectedAreas);
-    if (next.has(value)) next.delete(value);
-    else next.add(value);
-    onChange(next);
-  };
-
-  const searchLower = areaSearch.trim().toLowerCase();
-  const filteredAreas = searchLower
-    ? areas.filter((a) => a.label.toLowerCase().includes(searchLower))
-    : areas;
-
-  const count = selectedAreas.size;
-  const displayText = count === 0 ? t('search.area.select') : count === 1 ? areas.find((a) => a.value === [...selectedAreas][0])?.label ?? t('search.area.one') : t('search.area.many').replace('{n}', String(count));
-
+function SingleSelect({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: Option[];
+  value: string;
+  onChange: (next: string) => void;
+}) {
   return (
-    <div className="relative flex-1 min-w-0" ref={dropdownRef}>
-      <button
-        type="button"
-        className="w-full px-2 sm:px-4 py-2 md:py-3 text-left flex items-center justify-between gap-1 sm:gap-2 hover:bg-gray-50 transition-colors rounded-lg group"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] md:text-xs text-gray-500 mb-0.5 truncate">{t('search.area.label_short')}</div>
-          <div className="text-xs md:text-sm text-gray-900 font-medium truncate">{displayText}</div>
-        </div>
-        <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-100 z-[100] flex flex-col overflow-hidden min-w-[220px] w-max max-w-[min(100vw,320px)]"
-            style={{ maxHeight: AREA_DROPDOWN_MAX_HEIGHT }}
-          >
-            <div className="flex-shrink-0 px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
-              {t('search.area.header')}
-            </div>
-            <div className="flex-shrink-0 p-2 border-b border-gray-100">
-              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
-                <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <input
-                  type="text"
-                  value={areaSearch}
-                  onChange={(e) => setAreaSearch(e.target.value)}
-                  placeholder={t('search.area.search_placeholder')}
-                  className="flex-1 min-w-0 bg-transparent border-none outline-none text-sm text-gray-900 placeholder:text-gray-400"
-                />
-              </div>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1">
-              {filteredAreas.length === 0 ? (
-                <div className="px-4 py-3 text-sm text-gray-500">{t('search.area.no_match')}</div>
-              ) : (
-                filteredAreas.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer text-sm text-gray-700 border-b border-gray-50 last:border-b-0 min-w-0"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedAreas.has(option.value)}
-                      onChange={() => toggle(option.value)}
-                      className="w-4 h-4 rounded border-gray-300 text-[#C1121F] focus:ring-[#C1121F] flex-shrink-0"
-                    />
-                    <span className="min-w-0 break-words">{option.label}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <label className="block">
+      <span className="mb-1 block text-xs text-gray-600">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm">
+        <option value="">指定なし</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
 interface QuickPropertySearchProps {
   onSearch?: (params: HeroSearchParams) => void;
+  initialParams?: HeroSearchParams;
 }
 
-export function QuickPropertySearch({ onSearch }: QuickPropertySearchProps = {}) {
-  const { t } = useLanguage();
-  const [propertyType, setPropertyType] = useState<PropertyType>('rent');
-  const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
-  const [budget, setBudget] = useState('');
-  const [bedroomCount, setBedroomCount] = useState('');
+export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySearchProps = {}) {
   const [keyword, setKeyword] = useState('');
+  const [propertyCategories, setPropertyCategories] = useState<string[]>([]);
+  const [regions, setRegions] = useState<string[]>([]);
+  const [priceBand, setPriceBand] = useState('');
+  const [selectedTokyoWards, setSelectedTokyoWards] = useState<string[]>([]);
+  const [updatedWithin, setUpdatedWithin] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
-  
-  // Advanced filters
-  const [propertySizeMin, setPropertySizeMin] = useState('');
-  const [propertySizeMax, setPropertySizeMax] = useState('');
-  const [petFriendly, setPetFriendly] = useState(false);
-  const [foreignFriendly, setForeignFriendly] = useState(false);
-  const [luxury, setLuxury] = useState(false);
-  const [furnished, setFurnished] = useState(false);
-  const [highRiseResidence, setHighRiseResidence] = useState(false);
-  const [noKeyMoney, setNoKeyMoney] = useState(false);
-  const [forStudents, setForStudents] = useState(false);
-  const [designers, setDesigners] = useState(false);
-  const [forFamilies, setForFamilies] = useState(false);
+  const [capRate, setCapRate] = useState('');
+  const [buildingAge, setBuildingAge] = useState('');
+  const [rights, setRights] = useState<string[]>([]);
+  const [landTypes, setLandTypes] = useState<string[]>([]);
+  const [zoningTypes, setZoningTypes] = useState<string[]>([]);
+  const [planningAreas, setPlanningAreas] = useState<string[]>([]);
+  const [stationDistance, setStationDistance] = useState('');
+  const [buildingUnit, setBuildingUnit] = useState<'sqm' | 'tsubo'>('sqm');
+  const [landUnit, setLandUnit] = useState<'sqm' | 'tsubo'>('sqm');
+  const [buildingAreaMin, setBuildingAreaMin] = useState('');
+  const [buildingAreaMax, setBuildingAreaMax] = useState('');
+  const [landAreaMin, setLandAreaMin] = useState('');
+  const [landAreaMax, setLandAreaMax] = useState('');
 
-  const budgetOptions: DropdownOption[] = useMemo(() => {
-    const keys = propertyType === 'buy' ? buyBudgetKeys : rentBudgetKeys;
-    return keys.map(({ value, key }) => ({ value, label: t(key) }));
-  }, [propertyType, t]);
+  useEffect(() => {
+    if (!initialParams || initialParams.propertyType !== 'buy') return;
+    setKeyword(initialParams.keyword ?? '');
+    setPropertyCategories(initialParams.propertyCategories ?? []);
+    setRegions(initialParams.regions ?? []);
+    setPriceBand(initialParams.priceBand ?? '');
+    setSelectedTokyoWards(initialParams.selectedAreas ?? []);
+    setUpdatedWithin(initialParams.updatedWithin ?? '');
+    setCapRate(initialParams.capRate ?? '');
+    setBuildingAge(initialParams.buildingAge ?? '');
+    setRights(initialParams.rights ?? []);
+    setLandTypes(initialParams.landTypes ?? []);
+    setZoningTypes(initialParams.zoningTypes ?? []);
+    setPlanningAreas(initialParams.planningAreas ?? []);
+    setStationDistance(initialParams.stationDistance ?? '');
+    setBuildingUnit(initialParams.buildingAreaUnit ?? 'sqm');
+    setLandUnit(initialParams.landAreaUnit ?? 'sqm');
+    setBuildingAreaMin(initialParams.buildingAreaMin != null ? String(initialParams.buildingAreaMin) : '');
+    setBuildingAreaMax(initialParams.buildingAreaMax != null ? String(initialParams.buildingAreaMax) : '');
+    setLandAreaMin(initialParams.landAreaMin != null ? String(initialParams.landAreaMin) : '');
+    setLandAreaMax(initialParams.landAreaMax != null ? String(initialParams.landAreaMax) : '');
+  }, [initialParams]);
 
-  const bedroomOptions: DropdownOption[] = useMemo(() => {
-    return bedroomKeys.map(({ value, key }) => ({ value, label: t(key) }));
-  }, [t]);
+  const labelMap = useMemo(() => {
+    const all = [
+      ...quickCategories, ...quickRegions, ...priceBands, ...updatedOptions,
+      ...capRateOptions, ...buildingAgeOptions, ...rightsOptions, ...landTypeOptions,
+      ...zoningOptions, ...planningOptions, ...stationDistanceOptions, ...tokyo23WardOptions,
+    ];
+    return new Map(all.map((o) => [o.value, o.label]));
+  }, []);
 
-  const budgetLabel = propertyType === 'buy' ? t('search.budget.price') : t('search.budget.monthly_rent');
+  useEffect(() => {
+    if (!regions.includes('tokyo23') && selectedTokyoWards.length > 0) {
+      setSelectedTokyoWards([]);
+    }
+  }, [regions, selectedTokyoWards.length]);
 
-  const areaOptions: DropdownOption[] = useMemo(
-    () => AREA_OPTIONS.map((opt) => ({ value: opt.value, label: t('ward.' + opt.value) })),
-    [t]
-  );
+  const params: HeroSearchParams = {
+    propertyType: 'buy',
+    selectedAreas: selectedTokyoWards,
+    propertyCategories,
+    regions,
+    priceBand: priceBand || undefined,
+    keyword: keyword.trim() || undefined,
+    updatedWithin: updatedWithin || undefined,
+    capRate: capRate || undefined,
+    buildingAge: buildingAge || undefined,
+    rights,
+    landTypes,
+    zoningTypes,
+    planningAreas,
+    stationDistance: stationDistance || undefined,
+    buildingAreaMin: buildingAreaMin ? Number(buildingAreaMin) : undefined,
+    buildingAreaMax: buildingAreaMax ? Number(buildingAreaMax) : undefined,
+    buildingAreaUnit: buildingUnit,
+    landAreaMin: landAreaMin ? Number(landAreaMin) : undefined,
+    landAreaMax: landAreaMax ? Number(landAreaMax) : undefined,
+    landAreaUnit: landUnit,
+  };
 
-  const handleSearch = () => {
-    const params: HeroSearchParams = {
-      propertyType,
-      selectedAreas: [...selectedAreas],
-      budget,
-      bedroomCount,
-      sizeMin: propertySizeMin ? Number(propertySizeMin) || undefined : undefined,
-      sizeMax: propertySizeMax ? Number(propertySizeMax) || undefined : undefined,
-      keyword: keyword.trim() || undefined,
-      luxury: luxury || undefined,
-      petFriendly: petFriendly || undefined,
-      foreignFriendly: foreignFriendly || undefined,
-      furnished: furnished || undefined,
-      highRiseResidence: highRiseResidence || undefined,
-      noKeyMoney: noKeyMoney || undefined,
-      forStudents: forStudents || undefined,
-      designers: designers || undefined,
-      forFamilies: forFamilies || undefined,
-    };
-    onSearch?.(params);
+  const tags = [
+    ...propertyCategories,
+    ...regions,
+    ...selectedTokyoWards,
+    ...(priceBand ? [priceBand] : []),
+    ...(updatedWithin ? [updatedWithin] : []),
+    ...(capRate ? [capRate] : []),
+    ...(buildingAge ? [buildingAge] : []),
+    ...rights,
+    ...landTypes,
+    ...zoningTypes,
+    ...planningAreas,
+    ...(stationDistance ? [stationDistance] : []),
+  ];
+
+  const removeTag = (value: string) => {
+    setPropertyCategories((prev) => prev.filter((v) => v !== value));
+    setRegions((prev) => prev.filter((v) => v !== value));
+    if (priceBand === value) setPriceBand('');
+    if (updatedWithin === value) setUpdatedWithin('');
+    if (capRate === value) setCapRate('');
+    if (buildingAge === value) setBuildingAge('');
+    setRights((prev) => prev.filter((v) => v !== value));
+    setLandTypes((prev) => prev.filter((v) => v !== value));
+    setZoningTypes((prev) => prev.filter((v) => v !== value));
+    setPlanningAreas((prev) => prev.filter((v) => v !== value));
+    setSelectedTokyoWards((prev) => prev.filter((v) => v !== value));
+    if (stationDistance === value) setStationDistance('');
+  };
+
+  const resetAll = () => {
+    setKeyword('');
+    setPropertyCategories([]);
+    setRegions([]);
+    setPriceBand('');
+    setSelectedTokyoWards([]);
+    setUpdatedWithin('');
+    setCapRate('');
+    setBuildingAge('');
+    setRights([]);
+    setLandTypes([]);
+    setZoningTypes([]);
+    setPlanningAreas([]);
+    setStationDistance('');
+    setBuildingAreaMin('');
+    setBuildingAreaMax('');
+    setLandAreaMin('');
+    setLandAreaMax('');
+    setBuildingUnit('sqm');
+    setLandUnit('sqm');
+    onSearch?.({ propertyType: 'buy', selectedAreas: [] });
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, delay: 0.6 }}
-      className="w-full max-w-full md:max-w-5xl mx-auto overflow-visible px-2 md:px-0"
-    >
-      {/* Property Type Segmented Control */}
-      <div className="flex justify-center mb-3 md:mb-4">
-        <div className="inline-flex bg-white/95 backdrop-blur-sm rounded-full p-1 md:p-1.5 shadow-md md:shadow-lg border border-gray-100">
-          {propertyTypes.map((type) => (
-            <button
-              key={type}
-              onClick={() => {
-                setPropertyType(type);
-                setBudget(''); // Reset budget when type changes
-              }}
-              className="relative px-4 py-1.5 md:px-6 md:py-2.5 rounded-full font-semibold text-xs md:text-sm transition-all duration-300"
-            >
-              {/* Active background */}
-              {propertyType === type && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute inset-0 bg-white rounded-full shadow-md"
-                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                />
-              )}
-              
-              {/* Text */}
-              <span className={`relative z-10 transition-colors ${
-                propertyType === type 
-                  ? 'text-gray-900' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}>
-                {type === 'rent' && t('search.rent')}
-                {type === 'buy' && t('search.buy')}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Keyword Search - 独立した行 */}
-      <div className="mb-3 md:mb-4">
-        <div className="bg-white/95 backdrop-blur-sm rounded-lg md:rounded-xl shadow-md md:shadow-lg border border-gray-100 px-3 py-2 md:px-4 md:py-3">
-          <div className="flex items-center gap-2 md:gap-3">
-            <Search className="w-4 h-4 md:w-5 md:h-5 text-gray-400 flex-shrink-0" />
+    <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-6xl mx-auto">
+      <div className="bg-white/95 rounded-xl border border-gray-100 shadow-lg p-3 md:p-4 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-1">
+          <label className="block">
+            <span className="mb-1 block text-xs text-gray-600">検索</span>
             <input
-              type="text"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder={t('search.placeholder.keyword')}
-              className="flex-1 border-none outline-none text-sm md:text-base text-gray-900 placeholder-gray-400 bg-transparent"
+              placeholder="タイトル・住所・駅・備考で検索"
+              className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm"
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <span key={tag} className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-gray-100">
+              {labelMap.get(tag) ?? tag}
+              <button type="button" onClick={() => removeTag(tag)} className="text-gray-500 hover:text-gray-900">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {keyword.trim() && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-gray-100">
+              検索: {keyword.trim()}
+              <button type="button" onClick={() => setKeyword('')} className="text-gray-500 hover:text-gray-900">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {(tags.length > 0 || keyword.trim()) && (
+            <button type="button" onClick={resetAll} className="text-xs text-[#C1121F] hover:underline">条件をリセット</button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <MultiSelect label="物件種別" options={quickCategories} values={propertyCategories} onChange={setPropertyCategories} />
+          <MultiSelect label="エリア" options={quickRegions} values={regions} onChange={setRegions} />
+          <SingleSelect label="価格帯" options={priceBands} value={priceBand} onChange={setPriceBand} />
+          <SingleSelect label="更新日時" options={updatedOptions} value={updatedWithin} onChange={setUpdatedWithin} />
+        </div>
+        {regions.includes('tokyo23') && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <MultiSelect
+              label="東京23区（区を選択）"
+              options={tokyo23WardOptions}
+              values={selectedTokyoWards}
+              onChange={setSelectedTokyoWards}
             />
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Main Search Bar（モバイル: 1段目 Area/Bedrooms/Rent、2段目 Search。md以上: 1行に4要素） */}
-      <div className="bg-white rounded-lg md:rounded-xl shadow-md md:shadow-lg border border-gray-100 overflow-visible">
-        {/* モバイル: 横スクロール廃止。1段目＝3項目、2段目＝Search */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={propertyType}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3 }}
-            className="overflow-visible"
-          >
-            <div className="flex flex-col md:flex-row md:flex-nowrap items-stretch min-w-0">
-              {/* 1段目: Area, Bedrooms, Monthly rent（モバイルは3列、md以上は3列+右にボタン） */}
-              <div className="flex flex-row flex-1 min-w-0 divide-x divide-gray-100">
-                <div className="flex-1 min-w-0 overflow-visible flex-shrink-0">
-                  <AreaMultiSelect selectedAreas={selectedAreas} onChange={setSelectedAreas} areas={areaOptions} />
-                </div>
-                <div className="flex-1 min-w-0 overflow-visible flex-shrink-0">
-                  <Dropdown
-                    label={t('search.bedrooms.label')}
-                    options={bedroomOptions}
-                    value={bedroomCount}
-                    onChange={setBedroomCount}
-                    placeholder={t('search.budget.any')}
-                  />
-                </div>
-                <div className="flex-1 min-w-0 overflow-visible flex-shrink-0">
-                  <Dropdown
-                    label={budgetLabel}
-                    options={budgetOptions}
-                    value={budget}
-                    onChange={setBudget}
-                    placeholder={t('search.budget.any_budget')}
-                  />
-                </div>
-              </div>
-              {/* Search ボタン: モバイルは2段目・全幅、md以上は1段目右端 */}
-              <div className="flex-shrink-0 border-t md:border-t-0 md:border-l border-gray-100">
-                <button
-                  onClick={handleSearch}
-                  className="w-full md:w-auto lg:px-8 px-4 py-3 md:py-3 lg:py-[18px] bg-[#C1121F] text-white font-semibold rounded-b-lg md:rounded-none md:rounded-r-xl hover:bg-[#A00F1A] transition-all hover:scale-[1.02] flex items-center justify-center gap-2 group text-sm md:text-base"
-                >
-                  <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                  <span>{t('search.btn_short')}</span>
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Advanced Filters Toggle */}
-        <div className="px-3 py-2 md:px-4 md:py-3 bg-gray-50 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm text-gray-600 hover:text-[#C1121F] transition-colors"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0" />
-            <span>{t('search.advanced_filters')}</span>
-            <ChevronDown 
-              className={`w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} 
-            />
+        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+          <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-[#C1121F]">
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>詳細条件を表示</span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+          </button>
+          <button type="button" onClick={() => onSearch?.(params)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C1121F] text-white text-sm font-semibold hover:bg-[#A00F1A]">
+            <Search className="w-4 h-4" />
+            検索
           </button>
         </div>
 
-        {/* Advanced Filters Panel */}
         <AnimatePresence>
           {showAdvanced && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-              className="overflow-hidden border-t border-gray-100"
-            >
-              <div className="p-3 md:p-6 bg-white grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6">
-                {/* Property Size (m²) — 広さの範囲を手動で指定 */}
-                <div className="md:col-span-2">
-                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-1.5 md:mb-2">
-                    {t('search.size.label')}
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                    <div className="flex items-center gap-1.5 md:gap-2 flex-1 min-w-[90px] md:min-w-[120px]">
-                      <span className="text-xs md:text-sm text-gray-500 whitespace-nowrap">{t('search.size.from')}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={propertySizeMin}
-                        onChange={(e) => setPropertySizeMin(e.target.value)}
-                        placeholder={t('search.size.placeholder_min')}
-                        className="flex-1 min-w-0 px-2.5 py-2 md:px-4 md:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C1121F]/20 focus:border-[#C1121F] transition-colors"
-                      />
-                      <span className="text-xs md:text-sm text-gray-500">m²</span>
-                    </div>
-                    <span className="text-gray-400 text-sm">–</span>
-                    <div className="flex items-center gap-1.5 md:gap-2 flex-1 min-w-[90px] md:min-w-[120px]">
-                      <span className="text-xs md:text-sm text-gray-500 whitespace-nowrap">{t('search.size.to')}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={propertySizeMax}
-                        onChange={(e) => setPropertySizeMax(e.target.value)}
-                        placeholder={t('search.size.placeholder_max')}
-                        className="flex-1 min-w-0 px-2.5 py-2 md:px-4 md:py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C1121F]/20 focus:border-[#C1121F] transition-colors"
-                      />
-                      <span className="text-xs md:text-sm text-gray-500">m²</span>
-                    </div>
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-t border-gray-100 pt-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <SingleSelect label="利回り" options={capRateOptions} value={capRate} onChange={setCapRate} />
+                <SingleSelect label="築年数" options={buildingAgeOptions} value={buildingAge} onChange={setBuildingAge} />
+                <MultiSelect label="権利関係" options={rightsOptions} values={rights} onChange={setRights} />
+                <MultiSelect label="地目" options={landTypeOptions} values={landTypes} onChange={setLandTypes} />
+                <MultiSelect label="用途地域" options={zoningOptions} values={zoningTypes} onChange={setZoningTypes} />
+                <MultiSelect label="区域区分" options={planningOptions} values={planningAreas} onChange={setPlanningAreas} />
+                <SingleSelect label="駅距離" options={stationDistanceOptions} value={stationDistance} onChange={setStationDistance} />
+                <div className="text-xs text-gray-500 self-end">複数選択は「項目名 (件数)」で表示されます。</div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs text-gray-600">延床面積</label>
+                  <div className="flex gap-2">
+                    <input value={buildingAreaMin} onChange={(e) => setBuildingAreaMin(e.target.value)} type="number" placeholder="最小" className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm" />
+                    <input value={buildingAreaMax} onChange={(e) => setBuildingAreaMax(e.target.value)} type="number" placeholder="最大" className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm" />
+                    <select value={buildingUnit} onChange={(e) => setBuildingUnit(e.target.value as 'sqm' | 'tsubo')} className="h-10 px-2 rounded-lg border border-gray-200 text-sm">
+                      <option value="sqm">㎡</option>
+                      <option value="tsubo">坪</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Categories Section */}
-                <div className="md:col-span-2">
-                  <label className="block text-xs md:text-sm font-medium text-gray-700 mb-2 md:mb-3">
-                    {t('filter.categories')}
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={petFriendly}
-                        onChange={(e) => setPetFriendly(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.pet_friendly')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={foreignFriendly}
-                        onChange={(e) => setForeignFriendly(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.foreign_friendly')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={luxury}
-                        onChange={(e) => setLuxury(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.luxury')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={furnished}
-                        onChange={(e) => setFurnished(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.furnished')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={highRiseResidence}
-                        onChange={(e) => setHighRiseResidence(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.high_rise')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={noKeyMoney}
-                        onChange={(e) => setNoKeyMoney(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.no_key_money')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={forStudents}
-                        onChange={(e) => setForStudents(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.students')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={designers}
-                        onChange={(e) => setDesigners(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.designers')}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5 md:gap-2 p-2 md:p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={forFamilies}
-                        onChange={(e) => setForFamilies(e.target.checked)}
-                        className="w-3.5 h-3.5 md:w-4 md:h-4 flex-shrink-0 text-[#C1121F] border-gray-300 rounded focus:ring-[#C1121F]"
-                      />
-                      <span className="text-xs md:text-sm font-medium text-gray-700">{t('category.families')}</span>
-                    </label>
+                <div className="space-y-2">
+                  <label className="block text-xs text-gray-600">土地面積</label>
+                  <div className="flex gap-2">
+                    <input value={landAreaMin} onChange={(e) => setLandAreaMin(e.target.value)} type="number" placeholder="最小" className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm" />
+                    <input value={landAreaMax} onChange={(e) => setLandAreaMax(e.target.value)} type="number" placeholder="最大" className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm" />
+                    <select value={landUnit} onChange={(e) => setLandUnit(e.target.value as 'sqm' | 'tsubo')} className="h-10 px-2 rounded-lg border border-gray-200 text-sm">
+                      <option value="sqm">㎡</option>
+                      <option value="tsubo">坪</option>
+                    </select>
                   </div>
                 </div>
               </div>

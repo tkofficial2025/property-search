@@ -13,23 +13,21 @@ import {
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay } from '@/lib/stationNames';
-import { fetchTranslationsForProperties, type PropertyTranslationResult } from '@/lib/translate-property';
 
 export interface FeaturedPropertiesCarouselProps {
-  onSelectProperty?: (id: number, source: 'rent' | 'buy') => void;
+  onSelectProperty?: (id: number, source: 'buy') => void;
   onViewAllClick?: () => void;
   title?: string;
   subtitle?: string;
 }
 
 export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, title, subtitle }: FeaturedPropertiesCarouselProps = {}) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
   const [properties, setProperties] = useState<FeaturedProperty[]>([]);
   const [loading, setLoading] = useState(true);
-  const [translationMap, setTranslationMap] = useState<Map<number, PropertyTranslationResult>>(new Map());
   const { formatPrice } = useCurrency();
   const displayTitle = title ?? t('section.featured.title');
   const displaySubtitle = subtitle ?? t('section.featured.subtitle');
@@ -69,20 +67,6 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
     fetchFeaturedProperties();
   }, []);
 
-  const propertiesIdsKey = properties.map((p) => p.id).sort((a, b) => a - b).join(',');
-  useEffect(() => {
-    if (language !== 'zh' || properties.length === 0) {
-      setTranslationMap(new Map());
-      return;
-    }
-    let cancelled = false;
-    const items = properties.map((p) => ({ id: p.id, title: p.title, address: p.location }));
-    fetchTranslationsForProperties(items, language).then((map) => {
-      if (!cancelled) setTranslationMap(map);
-    });
-    return () => { cancelled = true; };
-  }, [language, propertiesIdsKey]);
-
   const scroll = (direction: 'left' | 'right') => {
     if (scrollContainerRef.current) {
       const scrollAmount = 400;
@@ -114,7 +98,9 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
             transition={{ duration: 0.6 }}
           >
             <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-2">{displayTitle}</h2>
-            <p className="text-xs md:text-lg text-gray-600">{displaySubtitle}</p>
+            {displaySubtitle.trim() ? (
+              <p className="text-xs md:text-lg text-gray-600">{displaySubtitle}</p>
+            ) : null}
           </motion.div>
 
           <motion.a
@@ -191,8 +177,8 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                 key={property.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelectProperty?.(property.id, property.type === 'Rent' ? 'rent' : 'buy')}
-                onKeyDown={(e) => e.key === 'Enter' && onSelectProperty?.(property.id, property.type === 'Rent' ? 'rent' : 'buy')}
+                onClick={() => onSelectProperty?.(property.id, 'buy')}
+                onKeyDown={(e) => e.key === 'Enter' && onSelectProperty?.(property.id, 'buy')}
                 className="flex-shrink-0 w-[340px] md:w-[380px] snap-start group/card cursor-pointer"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -205,7 +191,7 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                   <div className="relative h-56 overflow-hidden">
                     <ImageWithFallback
                       src={getPropertyImageUrl(property.image, 'listing')}
-                      alt={language === 'zh' ? (translationMap.get(property.id)?.title_zh ?? property.title) : property.title}
+                      alt={property.title}
                       className="w-full h-full object-cover group-hover/card:scale-110 transition-transform duration-500"
                       loading="lazy"
                     />
@@ -217,16 +203,16 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                           : 'bg-white text-gray-900'
                       }`}
                     >
-                      {property.type === 'Rent' ? t('activity.for_rent') : t('activity.for_sale')}
+                      {t('activity.for_sale')}
                     </div>
                   </div>
 
                   {/* Property Details */}
                   <div className="p-6">
                     <h3 className="text-xl font-semibold text-gray-900 mb-1 group-hover/card:text-[#C1121F] transition-colors">
-                      {language === 'zh' ? (translationMap.get(property.id)?.title_zh ?? property.title) : property.title}
+                      {property.title}
                     </h3>
-                    <p className="text-sm text-gray-500 mb-4">{language === 'zh' ? (translationMap.get(property.id)?.address_zh ?? property.location) : property.location}</p>
+                    <p className="text-sm text-gray-500 mb-4">{property.location}</p>
 
                     {/* Property Stats */}
                     <div className="flex items-center gap-3 text-sm text-gray-600 mb-4 pb-4 border-b border-gray-100">
@@ -240,7 +226,7 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                     {/* Price */}
                     <div className="flex items-baseline justify-between mb-4 pb-4 border-b border-gray-100">
                       <span className="text-2xl font-bold text-gray-900">
-                        {formatPrice(property.priceYen, property.type === 'Rent' ? 'rent' : 'buy')}
+                        {formatPrice(property.priceYen, 'buy')}
                       </span>
                     </div>
 

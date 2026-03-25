@@ -105,12 +105,12 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
       
       const encodedAddress = encodeURIComponent(query);
       // 日本の住所に特化したパラメータを追加（英語表記も検索できるようにcountrycodesは指定しない）
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&limit=3&addressdetails=1&accept-language=ja,en&extratags=1`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&limit=3&addressdetails=1&accept-language=ja&extratags=1`;
       
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Premium Real Estate Website', // 必須
-          'Accept-Language': 'ja,en',
+          'Accept-Language': 'ja',
         },
       });
 

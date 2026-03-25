@@ -23,15 +23,14 @@ import { type Property, type SupabasePropertyRow, mapSupabaseRowToProperty } fro
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay } from '@/lib/stationNames';
-import { getPropertyTranslation } from '@/lib/translate-property';
 import { getPropertyImageUrl } from '@/lib/propertyImageUrl';
 import { PropertyDetailPageSkeleton } from '@/app/components/PropertyDetailPageSkeleton';
 import { toast } from 'sonner';
 
 interface PropertyDetailPageProps {
   propertyId: number;
-  source: 'rent' | 'buy';
-  onNavigate?: (page: 'home' | 'buy' | 'rent' | 'account' | 'favorites') => void;
+  source: 'buy';
+  onNavigate?: (page: 'home' | 'buy') => void;
   onBack?: () => void;
 }
 
@@ -57,7 +56,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
   const [inquiryLoading, setInquiryLoading] = useState(false);
   const [inquirySent, setInquirySent] = useState(false);
   const [inquiryError, setInquiryError] = useState<string | null>(null);
-  const [translation, setTranslation] = useState<{ title_zh: string; address_zh: string; property_information_zh?: string } | null>(null);
   const tourSectionRef = useRef<HTMLDivElement>(null);
   const inquirySectionRef = useRef<HTMLDivElement>(null);
 
@@ -125,21 +123,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
     }
     checkAlreadyRequested();
   }, [propertyId, loading]);
-
-  // 中国語表示時は物件名・住所・Property Information を DeepL で翻訳
-  useEffect(() => {
-    if (language !== 'zh' || !property) {
-      setTranslation(null);
-      return;
-    }
-    let cancelled = false;
-    getPropertyTranslation(property.id, property.title, property.address, property.propertyInformation).then((res) => {
-      if (!cancelled) setTranslation(res);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [language, property?.id, property?.title, property?.address, property?.propertyInformation, property]);
 
   const toggleFavorite = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -233,11 +216,11 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
     );
   }
 
-  const breadcrumbLabel = source === 'rent' ? t('search.rent') : t('search.buy');
-  const priceLabel = source === 'rent' ? t('property.price.rent') : t('property.price.buy');
+  const breadcrumbLabel = t('search.buy');
+  const priceLabel = t('property.price.buy');
   const priceDisplay = formatPrice(property.price, source);
-  const displayTitle = language === 'zh' && translation?.title_zh ? translation.title_zh : property.title;
-  const displayAddress = language === 'zh' && translation?.address_zh ? translation.address_zh : property.address;
+  const displayTitle = property.title;
+  const displayAddress = property.address;
 
   const allPhotos = [property.image, ...(property.images ?? [])].filter(Boolean) as string[];
   const featureFlags = [
@@ -460,25 +443,19 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
               </div>
             )}
 
-            {/* Property Information (Supabase の property_information があれば表示、中国語時は DeepL 翻訳) */}
+            {/* Property Information */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('property.information')}</h3>
               {property.propertyInformation && property.propertyInformation.trim() ? (
                 <>
                   <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">
-                    {language === 'zh' && translation?.property_information_zh
-                      ? (descriptionExpanded
-                          ? translation.property_information_zh
-                          : translation.property_information_zh.length > 200
-                            ? `${translation.property_information_zh.slice(0, 200)}...`
-                            : translation.property_information_zh)
-                      : (descriptionExpanded
-                          ? property.propertyInformation.trim()
-                          : property.propertyInformation.trim().length > 200
-                            ? `${property.propertyInformation.trim().slice(0, 200)}...`
-                            : property.propertyInformation.trim())}
+                    {descriptionExpanded
+                      ? property.propertyInformation.trim()
+                      : property.propertyInformation.trim().length > 200
+                        ? `${property.propertyInformation.trim().slice(0, 200)}...`
+                        : property.propertyInformation.trim()}
                   </p>
-                  {(language === 'zh' ? translation?.property_information_zh?.length ?? 0 : property.propertyInformation.trim().length) > 200 && (
+                  {property.propertyInformation.trim().length > 200 && (
                     <button
                       type="button"
                       onClick={() => setDescriptionExpanded(!descriptionExpanded)}
@@ -492,8 +469,8 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
                 <>
                   <p className="text-gray-600 text-sm leading-relaxed">
                     {descriptionExpanded
-                      ? `${displayTitle} offers a comfortable living space of ${property.size} m² in ${displayAddress}, with ${property.beds} bedroom(s) and ${property.layout} layout. Located ${property.walkingMinutes} ${t('property.walk.min')} from ${getStationDisplay(property.station, language)}, this property provides easy access to transport and local amenities.`
-                      : `${displayTitle} offers a comfortable living space of ${property.size} m² in ${displayAddress}...`}
+                      ? `${displayTitle}は、${displayAddress}に所在する専有面積約${property.size}m²、間取り${property.layout}、寝室${property.beds}室の物件です。${getStationDisplay(property.station, language)}から徒歩約${property.walkingMinutes}${t('property.walk.min_short')}でアクセスできます。`
+                      : `${displayTitle}は、${displayAddress}に所在する専有面積約${property.size}m²の物件です...`}
                   </p>
                   <button
                     type="button"

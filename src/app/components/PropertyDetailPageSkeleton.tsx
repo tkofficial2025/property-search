@@ -2,12 +2,12 @@ import { Header } from '@/app/components/Header';
 import { Skeleton } from '@/app/components/ui/skeleton';
 
 interface PropertyDetailPageSkeletonProps {
-  onNavigate?: (page: 'home' | 'buy' | 'rent' | 'account' | 'favorites') => void;
-  currentPage?: 'rent' | 'buy';
+  onNavigate?: (page: 'home' | 'buy') => void;
+  currentPage?: 'buy';
 }
 
 /** 物件詳細ページのレイアウトに合わせたスケルトン（チラつき防止） */
-export function PropertyDetailPageSkeleton({ onNavigate, currentPage = 'rent' }: PropertyDetailPageSkeletonProps) {
+export function PropertyDetailPageSkeleton({ onNavigate, currentPage = 'buy' }: PropertyDetailPageSkeletonProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header onNavigate={onNavigate} currentPage={currentPage} />

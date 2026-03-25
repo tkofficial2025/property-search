@@ -3,7 +3,7 @@ import { PropertyListingPage } from '@/app/components/PropertyListingPage';
 import type { HeroSearchParams } from '@/lib/searchFilters';
 
 interface BuyPropertiesPageProps {
-  onNavigate?: (page: 'home' | 'buy' | 'rent') => void;
+  onNavigate?: (page: 'home' | 'buy') => void;
   selectedWard?: string | null;
   onSelectProperty?: (id: number) => void;
   initialSearchParams?: HeroSearchParams;

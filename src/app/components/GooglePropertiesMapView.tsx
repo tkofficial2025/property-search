@@ -87,8 +87,8 @@ export function GooglePropertiesMapView({
       const position = { lat: coords.lat, lng: coords.lng };
       bounds.extend(position);
 
-      const priceText = formatPrice(property.price, property.type === 'rent' ? 'rent' : 'buy');
-      const url = `${window.location.origin}${window.location.pathname}?property=${property.id}&source=${property.type === 'rent' ? 'rent' : 'buy'}`;
+      const priceText = formatPrice(property.price, 'buy');
+      const url = `${window.location.origin}${window.location.pathname}?property=${property.id}&source=buy`;
       const content = `
         <div style="padding: 8px; min-width: 220px; max-width: 280px;">
           <p style="font-weight: 600; margin: 0 0 4px 0; line-height: 1.3;">${escapeHtml(property.title)}</p>

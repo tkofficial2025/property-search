@@ -9,6 +9,16 @@ const projectRoot = path.resolve(__dirname)
 
 export default defineConfig({
   root: projectRoot,
+  server: {
+    // Dropbox / 同期フォルダではネイティブの file watcher が不安定になり、HMR が落ちやすい
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
+    port: 5173,
+    // 5173 が取れなければ起動失敗にする（別ポートで起動→古いタブが connection refused になるのを防ぐ）
+    strictPort: true,
+  },
   plugins: [
     react(),
     tailwindcss(),

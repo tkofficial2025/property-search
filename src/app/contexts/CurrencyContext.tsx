@@ -69,9 +69,9 @@ function saveCachedRate(date: string, jpyPerUsd: number, jpyPerCny: number, jpyP
   }
 }
 
-/** Language for rent suffix: zh → /月, en → /mo. Pass from parent that has LanguageProvider. */
-export function CurrencyProvider({ children, language = 'en' }: { children: ReactNode; language?: 'en' | 'zh' }) {
-  const [currency, setCurrency] = useState<Currency>('JPY');
+/** Language for rent suffix: ja → /月. Always Japanese now. */
+export function CurrencyProvider({ children, language = 'ja' }: { children: ReactNode; language?: 'ja' }) {
+  const [currency, setCurrencyState] = useState<Currency>('JPY');
   const [jpyPerUsd, setJpyPerUsd] = useState<number>(150);
   const [jpyPerCny, setJpyPerCny] = useState<number>(20);
   const [jpyPerKrw, setJpyPerKrw] = useState<number>(0.1);
@@ -154,8 +154,11 @@ export function CurrencyProvider({ children, language = 'en' }: { children: Reac
     };
   }, []);
 
-  const rentSuffix = language === 'zh' ? '/月' : '/mo';
-  const useWan = language === 'zh'; // 中国語のときは K/M ではなく万単位
+  const rentSuffix = '/月'; // 常に日本語
+  const useWan = true; // 日本語では万単位を使用
+  const setCurrency = useCallback((_: Currency) => {
+    setCurrencyState('JPY');
+  }, []);
 
   const formatPrice = useCallback<CurrencyContextValue['formatPrice']>(
     (priceYen, type) => {

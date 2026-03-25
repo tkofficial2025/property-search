@@ -4,33 +4,17 @@
 export type Page =
   | 'home'
   | 'buy'
-  | 'rent'
+  | 'register'
   | 'consultation'
-  | 'category'
-  | 'blog'
-  | 'about'
   | 'cookie'
   | 'terms'
-  | 'privacy'
-  | 'account'
-  | 'signup'
-  | 'favorites'
-  | 'activity'
-  | 'profile';
+  | 'privacy';
 
 const PATH_TO_PAGE: Record<string, Page> = {
   '/': 'home',
   '/buy': 'buy',
-  '/rent': 'rent',
+  '/register': 'register',
   '/consultation': 'consultation',
-  '/category': 'category',
-  '/blog': 'blog',
-  '/about': 'about',
-  '/account': 'account',
-  '/signup': 'signup',
-  '/favorites': 'favorites',
-  '/activity': 'activity',
-  '/profile': 'profile',
   '/cookie-policy': 'cookie',
   '/terms': 'terms',
   '/privacy': 'privacy',
@@ -39,35 +23,20 @@ const PATH_TO_PAGE: Record<string, Page> = {
 const PAGE_TO_PATH: Record<Page, string> = {
   home: '/',
   buy: '/buy',
-  rent: '/rent',
+  register: '/register',
   consultation: '/consultation',
-  category: '/category',
-  blog: '/blog',
-  about: '/about',
-  account: '/account',
-  signup: '/signup',
-  favorites: '/favorites',
-  activity: '/activity',
-  profile: '/profile',
   cookie: '/cookie-policy',
   terms: '/terms',
   privacy: '/privacy',
 };
 
 export function getPageFromPath(pathname: string): Page {
-  // Remove /zh prefix if it exists
-  const base = pathname.startsWith('/zh/') ? pathname.substring(3) : 
-               pathname === '/zh' ? '/' : pathname;
-  const normalized = base.replace(/\/$/, '') || '/';
+  const normalized = pathname.replace(/\/$/, '') || '/';
   return PATH_TO_PAGE[normalized] ?? 'home';
 }
 
-export function getPathFromPage(page: Page, language?: string): string {
-  const path = PAGE_TO_PATH[page];
-  if (language === 'zh') {
-    return path === '/' ? '/zh' : `/zh${path}`;
-  }
-  return path;
+export function getPathFromPage(page: Page, _language?: string): string {
+  return PAGE_TO_PATH[page];
 }
 
 export function getPathname(): string {

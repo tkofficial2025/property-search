@@ -5,7 +5,6 @@ import 'leaflet/dist/leaflet.css';
 import Supercluster from 'supercluster';
 import { geocodeAddresses, type Coordinates } from '@/lib/geocoding';
 import { type Property } from '@/lib/properties';
-import type { PropertyTranslationResult } from '@/lib/translate-property';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay, type Language } from '@/lib/stationNames';
@@ -22,7 +21,6 @@ interface PropertiesMapViewProps {
   onPropertyClick?: (propertyId: number) => void;
   className?: string;
   height?: string;
-  translationMap?: Map<number, PropertyTranslationResult>;
 }
 
 /**
@@ -55,12 +53,10 @@ function ClusterUpdater({
   cluster, 
   onPropertyClick,
   language,
-  translationMap,
 }: { 
   cluster: Supercluster; 
   onPropertyClick?: (propertyId: number) => void;
   language: Language;
-  translationMap?: Map<number, PropertyTranslationResult>;
 }) {
   const map = useMap();
   const { formatPrice } = useCurrency();
@@ -153,13 +149,9 @@ function ClusterUpdater({
         } else {
           // 個別の物件マーカー
           const property = point.properties.property as Property;
-          const displayTitle = language === 'zh' && translationMap?.get(property.id)?.title_zh
-            ? translationMap.get(property.id)!.title_zh
-            : property.title;
-          const displayAddress = language === 'zh' && translationMap?.get(property.id)?.address_zh
-            ? translationMap.get(property.id)!.address_zh
-            : property.address;
-          const priceText = formatPrice(property.price, property.type === 'rent' ? 'rent' : 'buy');
+          const displayTitle = property.title;
+          const displayAddress = property.address;
+          const priceText = formatPrice(property.price, 'buy');
           // テーマ色に統一
           const themeColor = '#C1121F';
 
@@ -226,7 +218,7 @@ function ClusterUpdater({
                   // モバイルではクリックで即遷移せず Popup で詳細表示。PCでは従来どおり新しいタブで開く
                   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
                   if (isMobile) return; // Popup が開くだけにする
-                  const url = `${window.location.origin}${window.location.pathname}?property=${property.id}&source=${property.type === 'rent' ? 'rent' : 'buy'}`;
+                  const url = `${window.location.origin}${window.location.pathname}?property=${property.id}&source=buy`;
                   window.open(url, '_blank');
                 },
               }}
@@ -257,7 +249,7 @@ function ClusterUpdater({
                       if (onPropertyClick) {
                         onPropertyClick(property.id);
                       } else {
-                        const url = `${window.location.origin}${window.location.pathname}?property=${property.id}&source=${property.type === 'rent' ? 'rent' : 'buy'}`;
+                        const url = `${window.location.origin}${window.location.pathname}?property=${property.id}&source=buy`;
                         window.open(url, '_blank');
                       }
                     }}
@@ -280,7 +272,6 @@ export function PropertiesMapView({
   onPropertyClick, 
   className = '', 
   height = '600px',
-  translationMap,
 }: PropertiesMapViewProps) {
   const { formatPrice } = useCurrency();
   const { t, language } = useLanguage();

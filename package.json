@@ -4,8 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "node scripts/generate-blog-posts.js && vite build",
-    "dev": "vite",
+    "build": "node scripts/generate-blog-posts.js && node ./node_modules/vite/bin/vite.js build",
+    "dev": "node ./node_modules/vite/bin/vite.js",
     "generate-blog": "node scripts/generate-blog-posts.js"
   },
   "dependencies": {
@@ -50,7 +50,7 @@
     "embla-carousel-react": "8.6.0",
     "input-otp": "1.4.2",
     "leaflet": "^1.9.4",
-    "lucide-react": "0.487.0",
+    "lucide-react": "0.574.0",
     "motion": "12.23.24",
     "next-themes": "0.4.6",
     "react": "18.3.1",

@@ -31,7 +31,13 @@ lerna-debug.log*
 *.swo
 *~
 
+# Cursor / AI tools
+.claude/
+
 # OS files
 Thumbs.db
 .AppData/
 AppData/
+
+# Supabase local CLI temp
+supabase/.temp/

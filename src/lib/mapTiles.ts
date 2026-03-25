@@ -1,31 +1,22 @@
 /**
- * 地図タイルの言語別設定
- * - en: CARTO Light（英語・ラテン文字のラベルが多め）
- * - zh: OpenStreetMap（現地語表記。日本では日本語）
+ * 地図タイル（日本語ラベル中心の OSM）
  */
 
-export type MapLanguage = 'en' | 'zh';
+export type MapLanguage = 'ja';
 
 export interface TileLayerConfig {
   url: string;
   attribution: string;
 }
 
-const TILE_CONFIGS: Record<MapLanguage, TileLayerConfig> = {
-  en: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  },
-  zh: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
+const JA_TILE: TileLayerConfig = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 };
 
-export function getTileLayerConfig(language: MapLanguage): TileLayerConfig {
-  return TILE_CONFIGS[language];
+export function getTileLayerConfig(_language: MapLanguage): TileLayerConfig {
+  return JA_TILE;
 }
 
 /** .env の VITE_MAPTILER_API_KEY を取得。空や未設定なら undefined */

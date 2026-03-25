@@ -107,14 +107,11 @@ export interface PropertyForTranslation {
 }
 
 /**
- * 言語が zh のとき、物件リストの title/address の中国語翻訳を取得する。
- * 返り値の Map は id -> { title_zh, address_zh }。言語が en のときは空の Map。
+ * 日本語のみのため、外部翻訳は行わず常に空の Map を返す。
  */
 export async function fetchTranslationsForProperties(
-  properties: PropertyForTranslation[],
-  language: 'en' | 'zh'
+  _properties: PropertyForTranslation[],
+  _language: 'ja'
 ): Promise<Map<number, PropertyTranslationResult>> {
-  if (language !== 'zh' || properties.length === 0) return new Map();
-  const items = properties.map((p) => ({ propertyId: p.id, title: p.title, address: p.address }));
-  return getPropertyTranslationsBatch(items);
+  return new Map();
 }

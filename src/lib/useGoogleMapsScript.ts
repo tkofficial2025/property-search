@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 const SCRIPT_ID = 'google-maps-api-script';
-type Language = 'en' | 'zh';
+type Language = 'ja';
 
 declare global {
   interface Window {

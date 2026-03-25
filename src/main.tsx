@@ -2,13 +2,12 @@ import React from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Toaster } from "sonner";
 import App from "./app/App.tsx";
-import { LanguageProvider, useLanguage } from "./app/contexts/LanguageContext";
+import { LanguageProvider } from "./app/contexts/LanguageContext";
 import { CurrencyProvider } from "./app/contexts/CurrencyContext";
 import "./styles/index.css";
 
 function CurrencyProviderWithLanguage({ children }: { children: React.ReactNode }) {
-  const { language } = useLanguage();
-  return <CurrencyProvider language={language}>{children}</CurrencyProvider>;
+  return <CurrencyProvider language="ja">{children}</CurrencyProvider>;
 }
 
 const container = document.getElementById("root");
