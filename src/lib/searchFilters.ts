@@ -8,6 +8,8 @@ export interface HeroSearchParams {
   propertyCategories?: string[];
   regions?: string[];
   priceBand?: string;
+  minPriceOku?: number;
+  maxPriceOku?: number;
   updatedWithin?: string;
   capRate?: string;
   buildingAge?: string;
@@ -47,6 +49,10 @@ function includesAny(text: string, words: string[]): boolean {
 }
 
 function matchesPropertyCategory(property: Property, categories: string[]): boolean {
+  // DB に正規化カテゴリがあれば最優先で使う
+  if (property.propertyCategory && categories.includes(property.propertyCategory)) {
+    return true;
+  }
   const hay = `${property.title} ${property.propertyInformation ?? ''}`.toLowerCase();
   const CATEGORY_KEYWORDS: Record<string, string[]> = {
     bldg: ['ビル', '一棟', 'building'],
@@ -132,6 +138,12 @@ export function filterPropertiesByHeroParams(
   if (budgetRange) {
     const [min, max] = budgetRange;
     list = list.filter((p) => p.price >= min && p.price <= max);
+  }
+  if (params.minPriceOku != null && params.minPriceOku >= 0) {
+    list = list.filter((p) => p.price >= params.minPriceOku! * 100_000_000);
+  }
+  if (params.maxPriceOku != null && params.maxPriceOku >= 0) {
+    list = list.filter((p) => p.price <= params.maxPriceOku! * 100_000_000);
   }
 
   list = list.filter((p) => matchesUpdatedWithin(p, params.updatedWithin));

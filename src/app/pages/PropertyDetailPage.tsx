@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { Header } from '@/app/components/Header';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { StationLineLogo } from '@/app/components/StationLineLogo';
 import { PropertyMap } from '@/app/components/PropertyMap';
 import { supabase } from '@/lib/supabase';
 import { type Property, type SupabasePropertyRow, mapSupabaseRowToProperty } from '@/lib/properties';
@@ -266,11 +265,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
             </div>
             <div className="flex flex-wrap gap-3">
               <div className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg text-sm">
-                <StationLineLogo 
-                  stationName={property.station} 
-                  size={20} 
-                  className="flex-shrink-0" 
-                />
                 <MapPin className="w-4 h-4 text-gray-600 flex-shrink-0" />
                 <span>{getStationDisplay(property.station, language)} • {property.walkingMinutes} {t('property.walk.min')}</span>
               </div>

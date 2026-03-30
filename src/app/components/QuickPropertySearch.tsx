@@ -44,14 +44,6 @@ const tokyo23WardOptions: Option[] = WARD_NAMES.map((name) => ({
   label: wardLabelMap[name] ?? name,
 }));
 
-const priceBands: Option[] = [
-  { value: 'up-to-10', label: '〜10億' },
-  { value: '10-50', label: '10〜50億' },
-  { value: '50-100', label: '50〜100億' },
-  { value: '100-plus', label: '100億以上' },
-  { value: 'negotiable', label: '価格応相談' },
-];
-
 const updatedOptions: Option[] = [
   { value: '1w', label: '1週間以内' },
   { value: '1m', label: '1ヶ月以内' },
@@ -223,7 +215,8 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
   const [keyword, setKeyword] = useState('');
   const [propertyCategories, setPropertyCategories] = useState<string[]>([]);
   const [regions, setRegions] = useState<string[]>([]);
-  const [priceBand, setPriceBand] = useState('');
+  const [minPriceOku, setMinPriceOku] = useState('');
+  const [maxPriceOku, setMaxPriceOku] = useState('');
   const [selectedTokyoWards, setSelectedTokyoWards] = useState<string[]>([]);
   const [updatedWithin, setUpdatedWithin] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -255,7 +248,19 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
     if (!hideKeywordSearch) setKeyword(p.keyword ?? '');
     setPropertyCategories(p.propertyCategories ?? EMPTY_STRING_ARRAY);
     setRegions(p.regions ?? EMPTY_STRING_ARRAY);
-    setPriceBand(p.priceBand ?? '');
+    const legacyBand = p.priceBand ?? '';
+    const legacyMin =
+      legacyBand === '10-50' ? 10 :
+      legacyBand === '50-100' ? 50 :
+      legacyBand === '100-plus' ? 100 :
+      '';
+    const legacyMax =
+      legacyBand === 'up-to-10' ? 10 :
+      legacyBand === '10-50' ? 50 :
+      legacyBand === '50-100' ? 100 :
+      '';
+    setMinPriceOku(p.minPriceOku != null ? String(p.minPriceOku) : String(legacyMin));
+    setMaxPriceOku(p.maxPriceOku != null ? String(p.maxPriceOku) : String(legacyMax));
     setSelectedTokyoWards(p.selectedAreas ?? EMPTY_STRING_ARRAY);
     setUpdatedWithin(p.updatedWithin ?? '');
     setCapRate(p.capRate ?? '');
@@ -275,7 +280,7 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
 
   const labelMap = useMemo(() => {
     const all = [
-      ...quickCategories, ...quickRegions, ...priceBands, ...updatedOptions,
+      ...quickCategories, ...quickRegions, ...updatedOptions,
       ...capRateOptions, ...buildingAgeOptions, ...rightsOptions, ...landTypeOptions,
       ...zoningOptions, ...planningOptions, ...stationDistanceOptions, ...tokyo23WardOptions,
     ];
@@ -294,7 +299,8 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
       selectedAreas: selectedTokyoWards,
       propertyCategories,
       regions,
-      priceBand: priceBand || undefined,
+      minPriceOku: minPriceOku ? Number(minPriceOku) : undefined,
+      maxPriceOku: maxPriceOku ? Number(maxPriceOku) : undefined,
       keyword: hideKeywordSearch ? undefined : keyword.trim() || undefined,
       updatedWithin: updatedWithin || undefined,
       capRate: capRate || undefined,
@@ -317,7 +323,8 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
       selectedTokyoWards,
       propertyCategories,
       regions,
-      priceBand,
+      minPriceOku,
+      maxPriceOku,
       updatedWithin,
       capRate,
       buildingAge,
@@ -335,24 +342,10 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
     ]
   );
 
-  const onSearchRef = useRef(onSearch);
-  onSearchRef.current = onSearch;
-
-  const lastListingPushJson = useRef<string>('');
-
-  useEffect(() => {
-    if (!hideKeywordSearch) return;
-    const json = JSON.stringify(params);
-    if (json === lastListingPushJson.current) return;
-    lastListingPushJson.current = json;
-    onSearchRef.current?.(params);
-  }, [hideKeywordSearch, params]);
-
   const tags = [
     ...propertyCategories,
     ...regions,
     ...selectedTokyoWards,
-    ...(priceBand ? [priceBand] : []),
     ...(updatedWithin ? [updatedWithin] : []),
     ...(capRate ? [capRate] : []),
     ...(buildingAge ? [buildingAge] : []),
@@ -366,7 +359,6 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
   const removeTag = (value: string) => {
     setPropertyCategories((prev) => prev.filter((v) => v !== value));
     setRegions((prev) => prev.filter((v) => v !== value));
-    if (priceBand === value) setPriceBand('');
     if (updatedWithin === value) setUpdatedWithin('');
     if (capRate === value) setCapRate('');
     if (buildingAge === value) setBuildingAge('');
@@ -382,7 +374,8 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
     setKeyword('');
     setPropertyCategories([]);
     setRegions([]);
-    setPriceBand('');
+    setMinPriceOku('');
+    setMaxPriceOku('');
     setSelectedTokyoWards([]);
     setUpdatedWithin('');
     setCapRate('');
@@ -400,6 +393,11 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
     setLandUnit('sqm');
     onSearch?.({ propertyType: 'buy', selectedAreas: [] });
   };
+
+  const priceRangeTag =
+    minPriceOku || maxPriceOku
+      ? `${minPriceOku || '0'}〜${maxPriceOku || '上限なし'}億円`
+      : null;
 
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-6xl mx-auto">
@@ -435,7 +433,15 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
               </button>
             </span>
           )}
-          {(tags.length > 0 || (!hideKeywordSearch && keyword.trim())) && (
+          {priceRangeTag && (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-gray-100">
+              価格: {priceRangeTag}
+              <button type="button" onClick={() => { setMinPriceOku(''); setMaxPriceOku(''); }} className="text-gray-500 hover:text-gray-900">
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {(tags.length > 0 || priceRangeTag || (!hideKeywordSearch && keyword.trim())) && (
             <button type="button" onClick={resetAll} className="text-xs text-[#C1121F] hover:underline">条件をリセット</button>
           )}
         </div>
@@ -443,7 +449,14 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <MultiSelect label="物件種別" options={quickCategories} values={propertyCategories} onChange={setPropertyCategories} />
           <MultiSelect label="エリア" options={quickRegions} values={regions} onChange={setRegions} />
-          <SingleSelect label="価格帯" options={priceBands} value={priceBand} onChange={setPriceBand} />
+          <div className="space-y-1">
+            <span className="mb-1 block text-xs text-gray-600">価格帯（億円）</span>
+            <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+              <input value={minPriceOku} onChange={(e) => setMinPriceOku(e.target.value)} type="number" min="0" placeholder="最小" className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm" />
+              <span className="text-xs text-gray-500">〜</span>
+              <input value={maxPriceOku} onChange={(e) => setMaxPriceOku(e.target.value)} type="number" min="0" placeholder="最大" className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm" />
+            </div>
+          </div>
           <SingleSelect label="更新日時" options={updatedOptions} value={updatedWithin} onChange={setUpdatedWithin} />
         </div>
         {regions.includes('tokyo23') && (
@@ -465,12 +478,10 @@ export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch
             <span>詳細条件を表示</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
           </button>
-          {!hideKeywordSearch && (
-            <button type="button" onClick={() => onSearch?.(params)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C1121F] text-white text-sm font-semibold hover:bg-[#A00F1A]">
+          <button type="button" onClick={() => onSearch?.(params)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C1121F] text-white text-sm font-semibold hover:bg-[#A00F1A]">
               <Search className="w-4 h-4" />
-              検索
+              {hideKeywordSearch ? '絞り込む' : '検索'}
             </button>
-          )}
         </div>
 
         <AnimatePresence>

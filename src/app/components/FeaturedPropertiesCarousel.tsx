@@ -2,7 +2,6 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, ArrowRight, MapPin, FileDown } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { getPropertyImageUrl } from '@/lib/propertyImageUrl';
-import { StationLineLogo } from '@/app/components/StationLineLogo';
 import { useRef, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
@@ -234,11 +233,6 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                     {/* Station Info */}
                     {property.station && (
                       <div className="flex items-center gap-2">
-                        <StationLineLogo 
-                          stationName={property.station} 
-                          size={18} 
-                          className="flex-shrink-0" 
-                        />
                         <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
                         <span className="text-sm text-gray-600">
                           {getStationDisplay(property.station, language)}

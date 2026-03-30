@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { QuickPropertySearch } from '@/app/components/QuickPropertySearch';
-import { StationLineLogo } from '@/app/components/StationLineLogo';
 import { PropertiesMapView } from '@/app/components/PropertiesMapView';
 import { supabase } from '@/lib/supabase';
 import { addressMatchesWard } from '@/lib/wards';
@@ -378,7 +377,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                                 <div className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full"><span className="text-xs font-medium text-white">{property.layout}</span></div>
                               </div>
                               <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full">
-                                <StationLineLogo stationName={property.station} size={12} className="flex-shrink-0" />
                                 <MapPin className="w-3 h-3 text-white flex-shrink-0" />
                                 <span className="text-xs font-medium text-white">{getStationDisplay(property.station, language)} • {property.walkingMinutes} {t('property.walk.min')}</span>
                               </div>
@@ -414,7 +412,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                               <div className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full"><span className="text-xs font-medium text-white">{property.layout}</span></div>
                             </div>
                             <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full">
-                              <StationLineLogo stationName={property.station} size={12} className="flex-shrink-0" />
                               <MapPin className="w-3 h-3 text-white flex-shrink-0" />
                               <span className="text-xs font-medium text-white">{getStationDisplay(property.station, language)} • {property.walkingMinutes} {t('property.walk.min')}</span>
                             </div>
@@ -572,7 +569,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                                 <div className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full"><span className="text-xs font-medium text-white">{property.layout}</span></div>
                               </div>
                               <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full">
-                                <StationLineLogo stationName={property.station} size={12} className="flex-shrink-0" />
                                 <MapPin className="w-3 h-3 text-white flex-shrink-0" />
                                 <span className="text-xs font-medium text-white">{getStationDisplay(property.station, language)} • {property.walkingMinutes} {t('property.walk.min')}</span>
                               </div>
@@ -608,7 +604,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                               <div className="px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full"><span className="text-xs font-medium text-white">{property.layout}</span></div>
                             </div>
                             <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/20 backdrop-blur-sm rounded-full">
-                              <StationLineLogo stationName={property.station} size={12} className="flex-shrink-0" />
                               <MapPin className="w-3 h-3 text-white flex-shrink-0" />
                               <span className="text-xs font-medium text-white">{getStationDisplay(property.station, language)} • {property.walkingMinutes} {t('property.walk.min')}</span>
                             </div>

@@ -1,12 +1,15 @@
 /**
  * 住所から座標（緯度・経度）を取得するジオコーディング関数
- * OpenStreetMap Nominatim APIを使用（無料、レート制限あり）
+ * Nominatim はブラウザから直接呼ばず /api/geocode 経由（CORS・利用規約対応）
  */
 
 export interface Coordinates {
   lat: number;
   lng: number;
 }
+
+const addressCache = new Map<string, Coordinates | null>();
+const inFlightByAddress = new Map<string, Promise<Coordinates | null>>();
 
 /**
  * 住所を正規化（日本語・英語両対応）
@@ -70,6 +73,33 @@ function translateEnglishToJapanese(address: string): string {
   return translated;
 }
 
+type ProxyFetchResult = {
+  data: unknown[] | null;
+  rateLimited: boolean;
+};
+
+/** 同一オリジンの /api/geocode 経由（本番は Vercel、開発は Vite ミドルウェア） */
+async function fetchNominatimViaProxy(query: string): Promise<ProxyFetchResult> {
+  const url = `/api/geocode?q=${encodeURIComponent(query)}`;
+  let response = await fetch(url);
+  if (response.status === 429) {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await fetch(url);
+  }
+  if (response.status === 429) {
+    return { data: null, rateLimited: true };
+  }
+  if (!response.ok) {
+    return { data: null, rateLimited: false };
+  }
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return { data: null, rateLimited: false };
+  }
+  const data: unknown = await response.json();
+  return { data: Array.isArray(data) ? data : null, rateLimited: false };
+}
+
 /**
  * 住所を座標に変換
  * @param address 住所（例: "東京都渋谷区..."）
@@ -80,9 +110,20 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
     return null;
   }
 
-  try {
+  const normalizedAddressKey = normalizeAddress(address);
+  if (addressCache.has(normalizedAddressKey)) {
+    return addressCache.get(normalizedAddressKey) ?? null;
+  }
+
+  const inFlight = inFlightByAddress.get(normalizedAddressKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = (async () => {
+    try {
     // 住所を正規化
-    const normalizedAddress = normalizeAddress(address);
+    const normalizedAddress = normalizedAddressKey;
     
     // 英語表記を日本語に変換したバージョンも作成
     const japaneseAddress = translateEnglishToJapanese(normalizedAddress);
@@ -91,34 +132,19 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
     const searchQueries = [
       normalizedAddress, // 元の住所（英語表記の場合）
       japaneseAddress, // 日本語に変換した住所
-      normalizedAddress.replace(/\d+-\d+-\d+.*$/, ''), // 英語表記の番地を削除（例: "4-8-9"）
       normalizedAddress.replace(/\d+丁目.*$/, ''), // 丁目以降を削除
-      normalizedAddress.replace(/\d+番地.*$/, ''), // 番地以降を削除
-      normalizedAddress.replace(/\d+番.*$/, ''), // 番以降を削除
-      normalizedAddress.replace(/\d+号.*$/, ''), // 号以降を削除
-      japaneseAddress.replace(/\d+丁目.*$/, ''), // 日本語版：丁目以降を削除
-      japaneseAddress.replace(/\d+番地.*$/, ''), // 日本語版：番地以降を削除
     ].filter((q, index, self) => q && self.indexOf(q) === index); // 重複を削除
 
     for (const query of searchQueries) {
       if (!query.trim()) continue;
-      
-      const encodedAddress = encodeURIComponent(query);
-      // 日本の住所に特化したパラメータを追加（英語表記も検索できるようにcountrycodesは指定しない）
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&limit=3&addressdetails=1&accept-language=ja&extratags=1`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Premium Real Estate Website', // 必須
-          'Accept-Language': 'ja',
-        },
-      });
 
-      if (!response.ok) {
-        continue; // 次の検索戦略を試す
+      const { data, rateLimited } = await fetchNominatimViaProxy(query);
+      if (rateLimited) {
+        break;
       }
-
-      const data = await response.json();
+      if (!data) {
+        continue;
+      }
       
       if (Array.isArray(data) && data.length > 0) {
         // 最も関連性の高い結果を選択
@@ -135,11 +161,14 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
           }
           
           // スコア計算（重要度 + 日本国内かどうか）
-          const importance = parseFloat(result.importance || '0');
-          const isJapan = result.address?.country_code === 'jp' || 
-                         result.address?.country === 'Japan' ||
-                         result.display_name?.includes('Japan') ||
-                         result.display_name?.includes('日本');
+          const importance = parseFloat(String(result.importance ?? '0'));
+          const addr = result.address as Record<string, unknown> | undefined;
+          const displayName = String(result.display_name ?? '');
+          const isJapan =
+            addr?.country_code === 'jp' ||
+            addr?.country === 'Japan' ||
+            displayName.includes('Japan') ||
+            displayName.includes('日本');
           
           const score = importance + (isJapan ? 0.3 : 0);
           
@@ -149,23 +178,33 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
           }
         }
         
-        const lat = parseFloat(bestResult.lat);
-        const lng = parseFloat(bestResult.lon);
+        const lat = parseFloat(String(bestResult.lat));
+        const lng = parseFloat(String(bestResult.lon));
         
         if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-          return { lat, lng };
+          const coords = { lat, lng };
+          addressCache.set(normalizedAddressKey, coords);
+          return coords;
         }
       }
       
-      // レート制限を考慮して少し待機
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Nominatim 利用規約: 公開 API は最大 1 リクエスト/秒程度
+      await new Promise((resolve) => setTimeout(resolve, 1100));
     }
 
+    addressCache.set(normalizedAddressKey, null);
     return null;
-  } catch (error) {
-    console.error('Geocoding error:', error);
-    return null;
-  }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      addressCache.set(normalizedAddressKey, null);
+      return null;
+    } finally {
+      inFlightByAddress.delete(normalizedAddressKey);
+    }
+  })();
+
+  inFlightByAddress.set(normalizedAddressKey, promise);
+  return promise;
 }
 
 /**
@@ -174,17 +213,18 @@ export async function geocodeAddress(address: string): Promise<Coordinates | nul
  * @returns 座標の配列（取得できなかった場合はnull）
  */
 export async function geocodeAddresses(addresses: string[]): Promise<(Coordinates | null)[]> {
-  const results: (Coordinates | null)[] = [];
-  
-  for (const address of addresses) {
+  const uniqueAddresses = [...new Set(addresses)];
+  const resolved = new Map<string, Coordinates | null>();
+
+  for (const address of uniqueAddresses) {
     const coords = await geocodeAddress(address);
-    results.push(coords);
+    resolved.set(address, coords);
     
     // レート制限を考慮して1秒待機
-    if (addresses.length > 1) {
+    if (uniqueAddresses.length > 1) {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
-  
-  return results;
+
+  return addresses.map((address) => resolved.get(address) ?? null);
 }

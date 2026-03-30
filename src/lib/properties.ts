@@ -35,6 +35,7 @@ export interface SupabasePropertyRow {
   property_information?: string | null;
   /** Storage `property-pdfs` バケット内パス */
   source_pdf_path?: string | null;
+  property_category?: string | null;
 }
 
 /**
@@ -73,6 +74,7 @@ export interface Property {
   longitude?: number;
   /** PDF 取り込み時に保存した元ファイル（Storage パス） */
   sourcePdfPath?: string | null;
+  propertyCategory?: string;
 }
 
 /** 行オブジェクトから値を取得（snake_case / camelCase 両対応） */
@@ -171,6 +173,11 @@ export function mapSupabaseRowToProperty(row: SupabasePropertyRow | Record<strin
       const v = get(r, 'source_pdf_path', 'sourcePdfPath');
       if (v == null || String(v).trim() === '') return undefined;
       return String(v);
+    })(),
+    propertyCategory: (() => {
+      const v = get(r, 'property_category', 'propertyCategory');
+      if (v == null || String(v).trim() === '') return undefined;
+      return String(v).trim();
     })(),
   };
 }
