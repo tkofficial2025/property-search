@@ -1,7 +1,6 @@
 import { type Property } from './properties';
 
 export type SortOption = 
-  | 'popularity'
   | 'price-asc'
   | 'price-desc'
   | 'size-asc'
@@ -18,16 +17,6 @@ export function sortProperties(properties: Property[], sortOption: SortOption): 
   const sorted = [...properties];
 
   switch (sortOption) {
-    case 'popularity':
-      // 人気順: isFeatured > isNew > id降順
-      return sorted.sort((a, b) => {
-        if (a.isFeatured && !b.isFeatured) return -1;
-        if (!a.isFeatured && b.isFeatured) return 1;
-        if (a.isNew && !b.isNew) return -1;
-        if (!a.isNew && b.isNew) return 1;
-        return b.id - a.id;
-      });
-
     case 'price-asc':
       // 価格順（低→高）
       return sorted.sort((a, b) => a.price - b.price);
@@ -91,13 +80,12 @@ export function sortProperties(properties: Property[], sortOption: SortOption): 
  * 並び替えオプションのラベル
  */
 export const sortOptions: { value: SortOption; label: string }[] = [
-  { value: 'popularity', label: 'Popularity' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
   { value: 'price-asc', label: 'Price (Low to High)' },
   { value: 'price-desc', label: 'Price (High to Low)' },
   { value: 'size-asc', label: 'Size (Small to Large)' },
   { value: 'size-desc', label: 'Size (Large to Small)' },
   { value: 'walking-asc', label: 'Walking Distance (Near)' },
   { value: 'walking-desc', label: 'Walking Distance (Far)' },
-  { value: 'newest', label: 'Newest' },
-  { value: 'oldest', label: 'Oldest' },
 ];

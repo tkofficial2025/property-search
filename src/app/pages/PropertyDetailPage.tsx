@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Heart,
   MapPin,
@@ -10,20 +10,19 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronRight,
-  Calendar,
-  Clock,
+  FileDown,
 } from 'lucide-react';
 import { Header } from '@/app/components/Header';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { StationLineLogo } from '@/app/components/StationLineLogo';
 import { PropertyMap } from '@/app/components/PropertyMap';
 import { supabase } from '@/lib/supabase';
-import { sendRequestEmails } from '@/lib/send-request-emails';
 import { type Property, type SupabasePropertyRow, mapSupabaseRowToProperty } from '@/lib/properties';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay } from '@/lib/stationNames';
 import { getPropertyImageUrl } from '@/lib/propertyImageUrl';
+import { getPropertyPdfPublicUrl } from '@/lib/propertyPdfUrl';
 import { PropertyDetailPageSkeleton } from '@/app/components/PropertyDetailPageSkeleton';
 import { toast } from 'sonner';
 
@@ -44,20 +43,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [favoriteMessage, setFavoriteMessage] = useState<'added' | 'removed' | 'error' | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const [tourCandidates, setTourCandidates] = useState<{ date: string; timeRange: string }[]>([
-    { date: '', timeRange: '09:00-12:00' },
-    { date: '', timeRange: '09:00-12:00' },
-    { date: '', timeRange: '09:00-12:00' },
-  ]);
-  const [tourConfirmed, setTourConfirmed] = useState(false);
-  const [tourError, setTourError] = useState<string | null>(null);
-  const [inquiryName, setInquiryName] = useState('');
-  const [inquiryEmail, setInquiryEmail] = useState('');
-  const [inquiryLoading, setInquiryLoading] = useState(false);
-  const [inquirySent, setInquirySent] = useState(false);
-  const [inquiryError, setInquiryError] = useState<string | null>(null);
-  const tourSectionRef = useRef<HTMLDivElement>(null);
-  const inquirySectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function fetchProperty() {
@@ -97,39 +82,9 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
     checkFavorite();
   }, [propertyId]);
 
-  // 既に内見予約・資料請求済みなら完了表示にする（物件読み込み後・DB の bigint に合わせて数値で検索）
-  useEffect(() => {
-    if (!propertyId || loading) return;
-    async function checkAlreadyRequested() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const pid = Number(propertyId);
-      const [tourRes, inquiryRes] = await Promise.all([
-        supabase
-          .from('property_tour_requests')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('property_id', pid)
-          .limit(1),
-        supabase
-          .from('property_inquiries')
-          .select('id')
-          .eq('email', String(user.email ?? '').trim())
-          .eq('property_id', pid)
-          .limit(1),
-      ]);
-      if (Array.isArray(tourRes.data) && tourRes.data.length > 0) setTourConfirmed(true);
-      if (Array.isArray(inquiryRes.data) && inquiryRes.data.length > 0) setInquirySent(true);
-    }
-    checkAlreadyRequested();
-  }, [propertyId, loading]);
-
   const toggleFavorite = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      onNavigate?.('account');
-      return;
-    }
+    if (!user) return;
     setFavoriteLoading(true);
     setFavoriteMessage(null);
     if (favorite) {
@@ -159,36 +114,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
     }
     setFavoriteLoading(false);
     setTimeout(() => setFavoriteMessage((m) => (m === 'error' ? m : null)), 3000);
-  };
-
-  const handleInquirySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = inquiryEmail.trim();
-    if (!email) return;
-    setInquiryError(null);
-    setInquiryLoading(true);
-    const { error } = await supabase.from('property_inquiries').insert({
-      name: inquiryName.trim() || null,
-      email,
-      property_id: propertyId,
-      property_title: property?.title ?? null,
-    });
-    setInquiryLoading(false);
-    if (error) {
-      setInquiryError(error.message);
-      return;
-    }
-    const nameForEmail = inquiryName.trim() || '';
-    setInquirySent(true);
-    setInquiryName('');
-    setInquiryEmail('');
-    sendRequestEmails({
-      type: 'inquiry',
-      email,
-      name: nameForEmail,
-      propertyId: Number(propertyId),
-      propertyTitle: property?.title ?? undefined,
-    }).then((r) => { if (!r.ok) console.error('[send-request-emails]', r.error); });
   };
 
   if (loading) {
@@ -249,9 +174,21 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
           <span className="text-gray-900 truncate max-w-[200px]">{displayTitle}</span>
         </nav>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column */}
-          <div className="lg:col-span-2 space-y-6">
+        {property.sourcePdfPath && (
+          <div className="mb-4">
+            <a
+              href={getPropertyPdfPublicUrl(property.sourcePdfPath)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-[#C1121F] hover:bg-gray-50 transition-colors"
+            >
+              <FileDown className="w-4 h-4" />
+              {t('property.download_pdf')}
+            </a>
+          </div>
+        )}
+
+        <div className="space-y-6">
             {/* Main Image + Grid (multiple photos from DB) */}
             {/* モバイル: 1枚メイン表示 + その他は横スクロール / デスクトップ: メイン+3枚縦 */}
             <div className="space-y-2">
@@ -316,23 +253,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
                 >
                   <Heart className={`w-5 h-5 ${favorite ? 'fill-[#C1121F] text-[#C1121F]' : 'text-gray-600'}`} />
                 </button>
-                {/* モバイルのみ: 内見・空房ボタン（該当セクションへスクロール） */}
-                <div className="flex gap-2 md:hidden">
-                  <button
-                    type="button"
-                    onClick={() => tourSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="px-3 py-2 text-xs font-medium rounded-lg bg-[#C1121F] text-white hover:bg-[#A00F1A] transition-colors whitespace-nowrap"
-                  >
-                    {t('property.tour.request_room_tour')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => inquirySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="px-3 py-2 text-xs font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-800 transition-colors whitespace-nowrap"
-                  >
-                    {t('property.check_availability.btn')}
-                  </button>
-                </div>
               </div>
               {favoriteMessage === 'added' && (
                 <p className="text-sm text-green-600 mt-2">{t('property.favorite.added')}</p>
@@ -508,169 +428,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
                 />
               </div>
             )}
-          </div>
-
-          {/* Right Column - Sticky */}
-          <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-[4.5rem] space-y-6">
-              {/* Request a Tour */}
-              <div ref={tourSectionRef} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('property.tour.title')}</h3>
-                {tourConfirmed ? (
-                  <p className="text-sm text-green-600 py-2">{t('property.tour.success')}</p>
-                ) : (
-                <>
-                <p className="text-xs text-gray-500 mb-4">{t('property.tour.instruction')}</p>
-                <div className="space-y-4">
-                  {tourCandidates.map((candidate, index) => (
-                    <div key={index} className="p-3 border border-gray-200 rounded-lg space-y-2">
-                      <span className="text-xs font-medium text-gray-600">{t('property.tour.option_n').replace('{n}', String(index + 1))}</span>
-                      <div className="flex flex-wrap gap-2 items-end">
-                        <div className="flex-1 min-w-[120px]">
-                          <label className="block text-xs text-gray-500 mb-1">{t('property.tour.date')}</label>
-                          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-2 py-1.5">
-                            <Calendar className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <input
-                              type="date"
-                              value={candidate.date}
-                              onChange={(e) => {
-                                const next = [...tourCandidates];
-                                next[index] = { ...next[index], date: e.target.value };
-                                setTourCandidates(next);
-                              }}
-                              className="flex-1 outline-none text-sm min-w-0"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-[120px]">
-                          <label className="block text-xs text-gray-500 mb-1">{t('property.tour.time_range')}</label>
-                          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-2 py-1.5">
-                            <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                            <select
-                              value={candidate.timeRange}
-                              onChange={(e) => {
-                                const next = [...tourCandidates];
-                                next[index] = { ...next[index], timeRange: e.target.value };
-                                setTourCandidates(next);
-                              }}
-                              className="flex-1 outline-none text-sm bg-transparent min-w-0"
-                            >
-                              <option value="09:00-12:00">09:00 – 12:00</option>
-                              <option value="12:00-15:00">12:00 – 15:00</option>
-                              <option value="15:00-18:00">15:00 – 18:00</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {tourError && (
-                    <p className="text-xs text-red-600 mb-2">{tourError}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setTourError(null);
-                      const { data: { user } } = await supabase.auth.getUser();
-                      if (!user) {
-                        setTourError(t('property.tour.signin_required'));
-                        return;
-                      }
-                      const { data: tourRequest, error: tourError } = await supabase
-                        .from('property_tour_requests')
-                        .insert({
-                          user_id: user.id,
-                          property_id: Number(propertyId),
-                        })
-                        .select('id')
-                        .single();
-                      if (tourError || !tourRequest) {
-                        setTourError(tourError?.message || t('property.tour.submit_error'));
-                        return;
-                      }
-                      const filled = tourCandidates.filter((c) => c.date.trim() !== '');
-                      if (filled.length > 0) {
-                        const { error: candidatesError } = await supabase
-                          .from('property_tour_request_candidates')
-                          .insert(
-                            filled.map((c) => ({
-                              tour_request_id: tourRequest.id,
-                              candidate_date: c.date,
-                              time_range: c.timeRange,
-                            }))
-                          );
-                        if (candidatesError) {
-                          setTourError(candidatesError.message || 'Failed to save preferred times.');
-                          return;
-                        }
-                      }
-                      setTourConfirmed(true);
-                      const userName = [user.user_metadata?.first_name, user.user_metadata?.last_name].filter(Boolean).join(' ') || user.email || '';
-                      sendRequestEmails({
-                        type: 'tour',
-                        userEmail: user.email ?? '',
-                        userName,
-                        propertyId: Number(propertyId),
-                        propertyTitle: property?.title ?? undefined,
-                        candidateDates: filled.length > 0 ? filled : undefined,
-                      }).then((r) => { if (!r.ok) console.error('[send-request-emails]', r.error); });
-                    }}
-                    disabled={!tourCandidates.every((c) => c.date.trim() !== '')}
-                    className="w-full py-3 bg-[#C1121F] text-white font-semibold rounded-lg hover:bg-[#A00F1A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#C1121F]"
-                  >
-                    {t('property.tour.confirm')}
-                  </button>
-                </div>
-                </>
-                )}
-              </div>
-
-              {/* Check Availability and Request Property Details */}
-              <div ref={inquirySectionRef} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('property.check_availability.title')}</h3>
-                <p className="text-xs text-gray-500 mb-3">{t('property.check_availability.desc')}</p>
-                {inquirySent ? (
-                  <p className="text-sm text-green-600 py-2">{t('property.check_availability.success')}</p>
-                ) : (
-                  <form onSubmit={handleInquirySubmit} className="space-y-3">
-                    <div>
-                      <label htmlFor="inquiry-name" className="block text-xs text-gray-500 mb-1">{t('property.check_availability.name')}</label>
-                      <input
-                        id="inquiry-name"
-                        type="text"
-                        value={inquiryName}
-                        onChange={(e) => setInquiryName(e.target.value)}
-                        placeholder="Your name"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#C1121F] focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="inquiry-email" className="block text-xs text-gray-500 mb-1">{t('property.check_availability.email')}</label>
-                      <input
-                        id="inquiry-email"
-                        type="email"
-                        value={inquiryEmail}
-                        onChange={(e) => setInquiryEmail(e.target.value)}
-                        placeholder={t('property.placeholder.email')}
-                        required
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#C1121F] focus:border-transparent"
-                      />
-                    </div>
-                    {inquiryError && (
-                      <p className="text-xs text-red-600">{inquiryError}</p>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={inquiryLoading}
-                      className="w-full py-3 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 disabled:opacity-60 transition-colors"
-                    >
-                      {inquiryLoading ? t('property.sending') : t('property.inquiry.submit')}
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Back to list */}

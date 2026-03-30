@@ -33,6 +33,8 @@ export interface SupabasePropertyRow {
   key_money?: number | null;
   initial_fees_credit_card?: boolean | null;
   property_information?: string | null;
+  /** Storage `property-pdfs` バケット内パス */
+  source_pdf_path?: string | null;
 }
 
 /**
@@ -69,6 +71,8 @@ export interface Property {
   propertyInformation?: string;
   latitude?: number;
   longitude?: number;
+  /** PDF 取り込み時に保存した元ファイル（Storage パス） */
+  sourcePdfPath?: string | null;
 }
 
 /** 行オブジェクトから値を取得（snake_case / camelCase 両対応） */
@@ -163,6 +167,11 @@ export function mapSupabaseRowToProperty(row: SupabasePropertyRow | Record<strin
     propertyInformation: get(r, 'property_information', 'propertyInformation') != null ? String(get(r, 'property_information', 'propertyInformation')) : undefined,
     latitude: toOptionalNumber(get(r, 'latitude')),
     longitude: toOptionalNumber(get(r, 'longitude')),
+    sourcePdfPath: (() => {
+      const v = get(r, 'source_pdf_path', 'sourcePdfPath');
+      if (v == null || String(v).trim() === '') return undefined;
+      return String(v);
+    })(),
   };
 }
 
@@ -195,6 +204,8 @@ export function mapSupabaseRowToFeaturedProperty(row: SupabasePropertyRow | Reco
   const type = typeVal === 'rent' ? 'Rent' : 'Buy';
   const price = Number(get(r, 'price') ?? 0);
   const priceStr = typeVal === 'rent' ? `¥${price.toLocaleString()}/mo` : `¥${price.toLocaleString()}`;
+  const pdfPathRaw = get(r, 'source_pdf_path', 'sourcePdfPath');
+  const sourcePdfPath = pdfPathRaw != null && String(pdfPathRaw).trim() !== '' ? String(pdfPathRaw) : undefined;
   return {
     id: Number(get(r, 'id') ?? 0),
     title: String(get(r, 'title') ?? ''),
@@ -208,5 +219,6 @@ export function mapSupabaseRowToFeaturedProperty(row: SupabasePropertyRow | Reco
     size: `${Number(get(r, 'size') ?? 0)}㎡`,
     station: String(get(r, 'station') ?? ''),
     walkingMinutes: toNumber(get(r, 'walking_minutes', 'walkingMinutes')),
+    sourcePdfPath,
   };
 }

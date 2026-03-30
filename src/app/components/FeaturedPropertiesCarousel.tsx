@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, ArrowRight, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, MapPin, FileDown } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { getPropertyImageUrl } from '@/lib/propertyImageUrl';
 import { StationLineLogo } from '@/app/components/StationLineLogo';
@@ -13,6 +13,7 @@ import {
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay } from '@/lib/stationNames';
+import { getPropertyPdfPublicUrl } from '@/lib/propertyPdfUrl';
 
 export interface FeaturedPropertiesCarouselProps {
   onSelectProperty?: (id: number, source: 'buy') => void;
@@ -22,7 +23,7 @@ export interface FeaturedPropertiesCarouselProps {
 }
 
 export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, title, subtitle }: FeaturedPropertiesCarouselProps = {}) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(true);
@@ -243,6 +244,20 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                           {getStationDisplay(property.station, language)}
                           {property.walkingMinutes && ` • ${property.walkingMinutes} ${t('property.walk.min')}`}
                         </span>
+                      </div>
+                    )}
+                    {property.sourcePdfPath && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <a
+                          href={getPropertyPdfPublicUrl(property.sourcePdfPath)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-2 text-sm font-medium text-[#C1121F] hover:underline"
+                        >
+                          <FileDown className="w-4 h-4 flex-shrink-0" />
+                          {t('property.download_pdf')}
+                        </a>
                       </div>
                     )}
                   </div>

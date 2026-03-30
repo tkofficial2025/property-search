@@ -19,6 +19,9 @@ const quickCategories: Option[] = [
   { value: 'medical', label: '病院・医療施設' },
 ];
 
+/** 同期で毎回 `?? []` しない（新しい [] ができて setState が無限に走るのを防ぐ） */
+const EMPTY_STRING_ARRAY: string[] = [];
+
 const quickRegions: Option[] = [
   { value: 'tokyo23', label: '東京23区' },
   { value: 'tokyo-other', label: '東京23区外' },
@@ -212,9 +215,11 @@ function SingleSelect({
 interface QuickPropertySearchProps {
   onSearch?: (params: HeroSearchParams) => void;
   initialParams?: HeroSearchParams;
+  /** 一覧ページではキーワード検索を出さない */
+  hideKeywordSearch?: boolean;
 }
 
-export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySearchProps = {}) {
+export function QuickPropertySearch({ onSearch, initialParams, hideKeywordSearch = false }: QuickPropertySearchProps = {}) {
   const [keyword, setKeyword] = useState('');
   const [propertyCategories, setPropertyCategories] = useState<string[]>([]);
   const [regions, setRegions] = useState<string[]>([]);
@@ -236,28 +241,37 @@ export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySe
   const [landAreaMin, setLandAreaMin] = useState('');
   const [landAreaMax, setLandAreaMax] = useState('');
 
-  useEffect(() => {
-    if (!initialParams || initialParams.propertyType !== 'buy') return;
-    setKeyword(initialParams.keyword ?? '');
-    setPropertyCategories(initialParams.propertyCategories ?? []);
-    setRegions(initialParams.regions ?? []);
-    setPriceBand(initialParams.priceBand ?? '');
-    setSelectedTokyoWards(initialParams.selectedAreas ?? []);
-    setUpdatedWithin(initialParams.updatedWithin ?? '');
-    setCapRate(initialParams.capRate ?? '');
-    setBuildingAge(initialParams.buildingAge ?? '');
-    setRights(initialParams.rights ?? []);
-    setLandTypes(initialParams.landTypes ?? []);
-    setZoningTypes(initialParams.zoningTypes ?? []);
-    setPlanningAreas(initialParams.planningAreas ?? []);
-    setStationDistance(initialParams.stationDistance ?? '');
-    setBuildingUnit(initialParams.buildingAreaUnit ?? 'sqm');
-    setLandUnit(initialParams.landAreaUnit ?? 'sqm');
-    setBuildingAreaMin(initialParams.buildingAreaMin != null ? String(initialParams.buildingAreaMin) : '');
-    setBuildingAreaMax(initialParams.buildingAreaMax != null ? String(initialParams.buildingAreaMax) : '');
-    setLandAreaMin(initialParams.landAreaMin != null ? String(initialParams.landAreaMin) : '');
-    setLandAreaMax(initialParams.landAreaMax != null ? String(initialParams.landAreaMax) : '');
+  const initialParamsContentKey = useMemo(() => {
+    if (!initialParams || initialParams.propertyType !== 'buy') return '';
+    return JSON.stringify(initialParams);
   }, [initialParams]);
+
+  const initialParamsRef = useRef(initialParams);
+  initialParamsRef.current = initialParams;
+
+  useEffect(() => {
+    const p = initialParamsRef.current;
+    if (!p || p.propertyType !== 'buy') return;
+    if (!hideKeywordSearch) setKeyword(p.keyword ?? '');
+    setPropertyCategories(p.propertyCategories ?? EMPTY_STRING_ARRAY);
+    setRegions(p.regions ?? EMPTY_STRING_ARRAY);
+    setPriceBand(p.priceBand ?? '');
+    setSelectedTokyoWards(p.selectedAreas ?? EMPTY_STRING_ARRAY);
+    setUpdatedWithin(p.updatedWithin ?? '');
+    setCapRate(p.capRate ?? '');
+    setBuildingAge(p.buildingAge ?? '');
+    setRights(p.rights ?? EMPTY_STRING_ARRAY);
+    setLandTypes(p.landTypes ?? EMPTY_STRING_ARRAY);
+    setZoningTypes(p.zoningTypes ?? EMPTY_STRING_ARRAY);
+    setPlanningAreas(p.planningAreas ?? EMPTY_STRING_ARRAY);
+    setStationDistance(p.stationDistance ?? '');
+    setBuildingUnit(p.buildingAreaUnit ?? 'sqm');
+    setLandUnit(p.landAreaUnit ?? 'sqm');
+    setBuildingAreaMin(p.buildingAreaMin != null ? String(p.buildingAreaMin) : '');
+    setBuildingAreaMax(p.buildingAreaMax != null ? String(p.buildingAreaMax) : '');
+    setLandAreaMin(p.landAreaMin != null ? String(p.landAreaMin) : '');
+    setLandAreaMax(p.landAreaMax != null ? String(p.landAreaMax) : '');
+  }, [initialParamsContentKey, hideKeywordSearch]);
 
   const labelMap = useMemo(() => {
     const all = [
@@ -274,28 +288,65 @@ export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySe
     }
   }, [regions, selectedTokyoWards.length]);
 
-  const params: HeroSearchParams = {
-    propertyType: 'buy',
-    selectedAreas: selectedTokyoWards,
-    propertyCategories,
-    regions,
-    priceBand: priceBand || undefined,
-    keyword: keyword.trim() || undefined,
-    updatedWithin: updatedWithin || undefined,
-    capRate: capRate || undefined,
-    buildingAge: buildingAge || undefined,
-    rights,
-    landTypes,
-    zoningTypes,
-    planningAreas,
-    stationDistance: stationDistance || undefined,
-    buildingAreaMin: buildingAreaMin ? Number(buildingAreaMin) : undefined,
-    buildingAreaMax: buildingAreaMax ? Number(buildingAreaMax) : undefined,
-    buildingAreaUnit: buildingUnit,
-    landAreaMin: landAreaMin ? Number(landAreaMin) : undefined,
-    landAreaMax: landAreaMax ? Number(landAreaMax) : undefined,
-    landAreaUnit: landUnit,
-  };
+  const params: HeroSearchParams = useMemo(
+    () => ({
+      propertyType: 'buy',
+      selectedAreas: selectedTokyoWards,
+      propertyCategories,
+      regions,
+      priceBand: priceBand || undefined,
+      keyword: hideKeywordSearch ? undefined : keyword.trim() || undefined,
+      updatedWithin: updatedWithin || undefined,
+      capRate: capRate || undefined,
+      buildingAge: buildingAge || undefined,
+      rights,
+      landTypes,
+      zoningTypes,
+      planningAreas,
+      stationDistance: stationDistance || undefined,
+      buildingAreaMin: buildingAreaMin ? Number(buildingAreaMin) : undefined,
+      buildingAreaMax: buildingAreaMax ? Number(buildingAreaMax) : undefined,
+      buildingAreaUnit: buildingUnit,
+      landAreaMin: landAreaMin ? Number(landAreaMin) : undefined,
+      landAreaMax: landAreaMax ? Number(landAreaMax) : undefined,
+      landAreaUnit: landUnit,
+    }),
+    [
+      hideKeywordSearch,
+      keyword,
+      selectedTokyoWards,
+      propertyCategories,
+      regions,
+      priceBand,
+      updatedWithin,
+      capRate,
+      buildingAge,
+      rights,
+      landTypes,
+      zoningTypes,
+      planningAreas,
+      stationDistance,
+      buildingAreaMin,
+      buildingAreaMax,
+      buildingUnit,
+      landAreaMin,
+      landAreaMax,
+      landUnit,
+    ]
+  );
+
+  const onSearchRef = useRef(onSearch);
+  onSearchRef.current = onSearch;
+
+  const lastListingPushJson = useRef<string>('');
+
+  useEffect(() => {
+    if (!hideKeywordSearch) return;
+    const json = JSON.stringify(params);
+    if (json === lastListingPushJson.current) return;
+    lastListingPushJson.current = json;
+    onSearchRef.current?.(params);
+  }, [hideKeywordSearch, params]);
 
   const tags = [
     ...propertyCategories,
@@ -353,17 +404,19 @@ export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySe
   return (
     <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-6xl mx-auto">
       <div className="bg-white/95 rounded-xl border border-gray-100 shadow-lg p-3 md:p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-1">
-          <label className="block">
-            <span className="mb-1 block text-xs text-gray-600">検索</span>
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="タイトル・住所・駅・備考で検索"
-              className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm"
-            />
-          </label>
-        </div>
+        {!hideKeywordSearch && (
+          <div className="grid grid-cols-1 md:grid-cols-1">
+            <label className="block">
+              <span className="mb-1 block text-xs text-gray-600">検索</span>
+              <input
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                placeholder="タイトル・住所・駅・備考で検索"
+                className="w-full h-11 px-3 rounded-lg border border-gray-200 bg-white text-sm"
+              />
+            </label>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2">
           {tags.map((tag) => (
@@ -374,7 +427,7 @@ export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySe
               </button>
             </span>
           ))}
-          {keyword.trim() && (
+          {!hideKeywordSearch && keyword.trim() && (
             <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full bg-gray-100">
               検索: {keyword.trim()}
               <button type="button" onClick={() => setKeyword('')} className="text-gray-500 hover:text-gray-900">
@@ -382,7 +435,7 @@ export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySe
               </button>
             </span>
           )}
-          {(tags.length > 0 || keyword.trim()) && (
+          {(tags.length > 0 || (!hideKeywordSearch && keyword.trim())) && (
             <button type="button" onClick={resetAll} className="text-xs text-[#C1121F] hover:underline">条件をリセット</button>
           )}
         </div>
@@ -404,16 +457,20 @@ export function QuickPropertySearch({ onSearch, initialParams }: QuickPropertySe
           </div>
         )}
 
-        <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+        <div
+          className={`flex items-center border-t border-gray-100 pt-3 ${hideKeywordSearch ? 'justify-start' : 'justify-between'}`}
+        >
           <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="inline-flex items-center gap-2 text-sm text-gray-700 hover:text-[#C1121F]">
             <SlidersHorizontal className="w-4 h-4" />
             <span>詳細条件を表示</span>
             <ChevronDown className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
           </button>
-          <button type="button" onClick={() => onSearch?.(params)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C1121F] text-white text-sm font-semibold hover:bg-[#A00F1A]">
-            <Search className="w-4 h-4" />
-            検索
-          </button>
+          {!hideKeywordSearch && (
+            <button type="button" onClick={() => onSearch?.(params)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#C1121F] text-white text-sm font-semibold hover:bg-[#A00F1A]">
+              <Search className="w-4 h-4" />
+              検索
+            </button>
+          )}
         </div>
 
         <AnimatePresence>

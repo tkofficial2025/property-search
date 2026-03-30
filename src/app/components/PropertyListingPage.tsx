@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import {
@@ -8,6 +8,9 @@ import {
   MapPin,
   Map as MapIcon,
   Bookmark,
+  ChevronDown,
+  SlidersHorizontal,
+  FileDown,
 } from 'lucide-react';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { QuickPropertySearch } from '@/app/components/QuickPropertySearch';
@@ -19,9 +22,12 @@ import { type Property, type SupabasePropertyRow, mapSupabaseRowToProperty } fro
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { filterPropertiesByHeroParams, type HeroSearchParams } from '@/lib/searchFilters';
 import { sortProperties, sortOptions, type SortOption } from '@/lib/sortProperties';
+
+const VALID_SORT_VALUES = new Set<SortOption>(sortOptions.map((o) => o.value));
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay } from '@/lib/stationNames';
 import { PropertyCardSkeleton } from '@/app/components/PropertyCardSkeleton';
+import { getPropertyPdfPublicUrl } from '@/lib/propertyPdfUrl';
 
 interface PropertyListingPageProps {
   selectedWard?: string | null;
@@ -34,6 +40,21 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
   const { t, language } = useLanguage();
   // デスクトップは地図表示ON、モバイルはOFF。言語切り替えで再マウントされても sessionStorage で復元
   const SHOW_MAP_KEY = 'buy-listing-showMap';
+  const FILTERS_EXPANDED_KEY = 'buy-listing-filtersPanel-v2';
+  const [filtersExpanded, setFiltersExpandedState] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const stored = sessionStorage.getItem(FILTERS_EXPANDED_KEY);
+    if (stored !== null) return stored === '1';
+    return false;
+  });
+  const setFiltersExpanded = (value: boolean) => {
+    setFiltersExpandedState(value);
+    try {
+      sessionStorage.setItem(FILTERS_EXPANDED_KEY, value ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
   const [showMap, setShowMapState] = useState(() => {
     if (typeof window === 'undefined') return true;
     const stored = sessionStorage.getItem(SHOW_MAP_KEY);
@@ -52,13 +73,23 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<HeroSearchParams>(() => {
-    if (initialSearchParams && initialSearchParams.propertyType === 'buy') return initialSearchParams;
+    if (initialSearchParams && initialSearchParams.propertyType === 'buy') {
+      return { ...initialSearchParams, keyword: undefined };
+    }
     return { propertyType: 'buy', selectedAreas: [] };
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(384); // w-96 = 384px
   const [isResizing, setIsResizing] = useState<boolean>(false);
-  const [sortOption, setSortOption] = useState<'popularity' | 'price-asc' | 'price-desc' | 'size-asc' | 'size-desc' | 'walking-asc' | 'walking-desc' | 'newest' | 'oldest'>('popularity');
+  const [sortOption, setSortOption] = useState<SortOption>('newest');
+  /** 削除済みの並び（例: popularity）が残っている場合は新着に戻す */
+  const effectiveSortOption: SortOption = VALID_SORT_VALUES.has(sortOption) ? sortOption : 'newest';
   const [retryTrigger, setRetryTrigger] = useState(0);
+
+  useEffect(() => {
+    if (!VALID_SORT_VALUES.has(sortOption)) setSortOption('newest');
+  }, [sortOption]);
+  const filterSectionRef = useRef<HTMLDivElement>(null);
+  const [mapTopPx, setMapTopPx] = useState(160);
 
   const isNewBadge = (property: Property): boolean => {
     if (property.isNew) return true;
@@ -78,7 +109,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
 
   useEffect(() => {
     if (initialSearchParams && initialSearchParams.propertyType === 'buy') {
-      setFilters(initialSearchParams);
+      setFilters({ ...initialSearchParams, keyword: undefined });
     }
   }, [initialSearchParams]);
 
@@ -108,7 +139,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
   const properties = selectedWard ? baseList.filter((p) => addressMatchesWard(p.address, selectedWard)) : baseList;
 
   // 並び替え適用
-  const sortedProperties = sortProperties(properties, sortOption);
+  const sortedProperties = sortProperties(properties, effectiveSortOption);
 
   const toggleFavorite = (id: number) => {
     const newFavorites = new Set(favorites);
@@ -150,16 +181,57 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
     };
   }, [isResizing]);
 
+  useLayoutEffect(() => {
+    const el = filterSectionRef.current;
+    if (!el) return;
+    const update = () => {
+      const bottom = el.getBoundingClientRect().bottom;
+      setMapTopPx(Math.max(100, Math.round(bottom)));
+    };
+    update();
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(update);
+    });
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [filtersExpanded, showMap]);
+
+  const mapAreaHeight = `calc(100vh - ${mapTopPx}px)`;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sticky Filter Bar */}
-      <div className="sticky top-20 z-40 bg-white border-b border-gray-200 shadow-sm" style={{ marginTop: '80px' }}>
+      {/* Sticky Filter Bar — 折りたたみで一覧・地図の縦スペースを確保 */}
+      <div
+        ref={filterSectionRef}
+        className="sticky top-20 z-40 bg-white border-b border-gray-200 shadow-sm"
+        style={{ marginTop: '80px' }}
+      >
         <div className="max-w-[1600px] mx-auto px-6">
-          <div className="flex items-center justify-between py-3 border-b border-gray-200">
-            <h2 className="text-sm font-semibold text-gray-900">{t('filter.title')}</h2>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3 border-b border-gray-200">
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-sm font-semibold text-gray-900">{t('filter.title')}</h2>
+              <button
+                type="button"
+                onClick={() => setFiltersExpanded(!filtersExpanded)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                aria-expanded={filtersExpanded}
+                aria-label={filtersExpanded ? t('filter.collapse_filters') : t('filter.expand_filters')}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{filtersExpanded ? t('filter.collapse_filters') : t('filter.expand_filters')}</span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 flex-shrink-0 text-gray-500 transition-transform ${filtersExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="text-sm font-medium text-gray-700">{t('filter.show_map')}</span>
               <button
+                type="button"
                 onClick={() => setShowMap(!showMap)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#C1121F] focus:ring-offset-2 ${
                   showMap ? 'bg-[#C1121F]' : 'bg-gray-300'
@@ -174,9 +246,15 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
             </div>
           </div>
 
-          <div className="py-4">
-            <QuickPropertySearch initialParams={filters} onSearch={(p) => setFilters(p)} />
-          </div>
+          {filtersExpanded && (
+            <div className="py-4">
+              <QuickPropertySearch
+                hideKeywordSearch
+                initialParams={filters}
+                onSearch={(p) => setFilters(p)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -184,13 +262,13 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
       {showMap ? (
         <>
           {/* PC: サイドバー(リスト) + 地図 */}
-          <div className="hidden md:flex relative z-0" style={{ height: 'calc(100vh - 160px)', marginTop: '0' }}>
+          <div className="hidden md:flex relative z-0" style={{ height: mapAreaHeight, marginTop: '0' }}>
           {/* Left Sidebar - Property Listings */}
           <div 
             className="bg-white border-r border-gray-200 shadow-sm overflow-y-auto overflow-x-hidden relative z-10" 
             style={{ 
               width: `${sidebarWidth}px`,
-              height: 'calc(100vh - 160px)',
+              height: mapAreaHeight,
               minWidth: '320px',
               maxWidth: '800px'
             }}
@@ -217,7 +295,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('sort.label')}</label>
                 <select
-                  value={sortOption}
+                  value={effectiveSortOption}
                   onChange={(e) => setSortOption(e.target.value as SortOption)}
                   className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg hover:border-gray-300 transition-all text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#C1121F] focus:border-transparent"
                 >
@@ -345,6 +423,20 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                       </>
                     );
                   })()}
+                  {property.sourcePdfPath && (
+                    <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 flex justify-end">
+                      <a
+                        href={getPropertyPdfPublicUrl(property.sourcePdfPath)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-[#C1121F] hover:underline"
+                      >
+                        <FileDown className="w-3.5 h-3.5 flex-shrink-0" />
+                        {t('property.download_pdf')}
+                      </a>
+                    </div>
+                  )}
                 </motion.div>
               ); })}
             </div>
@@ -371,7 +463,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
           </div>
           </div>
           {/* モバイル: 地図のみフル表示 */}
-          <div className="md:hidden relative z-0 w-full" style={{ height: 'calc(100vh - 160px)' }}>
+          <div className="md:hidden relative z-0 w-full" style={{ height: mapAreaHeight }}>
             <PropertiesMapView
               properties={properties}
               onPropertyClick={onSelectProperty}
@@ -395,7 +487,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
             <div className="w-48">
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('sort.label')}</label>
               <select
-                value={sortOption}
+                value={effectiveSortOption}
                 onChange={(e) => setSortOption(e.target.value as SortOption)}
                 className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg hover:border-gray-300 transition-all text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#C1121F] focus:border-transparent"
               >
@@ -525,6 +617,20 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                       </>
                     );
                   })()}
+                  {property.sourcePdfPath && (
+                    <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 flex justify-end">
+                      <a
+                        href={getPropertyPdfPublicUrl(property.sourcePdfPath)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-[#C1121F] hover:underline"
+                      >
+                        <FileDown className="w-3.5 h-3.5 flex-shrink-0" />
+                        {t('property.download_pdf')}
+                      </a>
+                    </div>
+                  )}
                 </motion.div>
               ); })}
             </div>

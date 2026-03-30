@@ -343,6 +343,8 @@ const UI_STRINGS: Record<string, string> = {
 
           // Listing & Filters
           'filter.title': '絞り込み',
+          'filter.expand_filters': '条件を表示',
+          'filter.collapse_filters': '条件をたたむ',
           'filter.show_map': '地図を表示',
           'map.loading': '地図を読み込み中...',
           'map.no_address': '住所が登録されていません。',
@@ -393,7 +395,6 @@ const UI_STRINGS: Record<string, string> = {
           'category.families': 'ファミリー向け',
           'category.foreign_friendly': '外国籍の方歓迎',
 
-          'sort.popularity': '人気順',
           'sort.price_asc': '価格（安い順）',
           'sort.price_desc': '価格（高い順）',
           'sort.size_asc': '面積（小さい順）',
@@ -413,6 +414,7 @@ const UI_STRINGS: Record<string, string> = {
           'listing.badge.new': '新着',
 
           'listing.load_more': 'さらに読み込む',
+  'property.download_pdf': 'PDFをダウンロード',
 
           // Consultation
           'consult.title': '無料相談',

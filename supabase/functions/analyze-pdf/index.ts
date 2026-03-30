@@ -4,25 +4,28 @@ const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
 const SYSTEM_PROMPT = `あなたは不動産物件PDFを解析するAIです。PDFから以下のフィールドを抽出し、必ずJSONのみを返してください。前置きや説明は不要です。
 
-重要: 以下のフィールドは必ず英語表記で返してください。
-- title（物件名）: 日本語の物件名を英語に翻訳してください
-- address（住所）: 日本語の住所を英語表記に変換してください（都道府県から）
-- station（最寄り駅名）: 日本語の駅名を英語表記に変換してください
-
 抽出フィールド（存在しない場合はnullを使用）:
-- title: 物件名（英語表記、必須）
-- address: 住所（英語表記、都道府県から、必須）
-- price: 賃料（数値、円単位、管理費除く）
-- management_fee: 管理費・共益費（数値、円単位）
-- beds: 部屋数（数値）
-- size: 専有面積（数値、㎡）
-- layout: 間取り（例: 1LDK, 2LDK）
-- station: 最寄り駅名（英語表記、必須）
+- title: 物件名（日本語のまま、必須）
+- address: 住所（日本語のまま、都道府県から、必須）
+- price: 売買価格または賃料（数値、円単位、管理費除く、必須）
+- type: "rent"（賃貸）または"buy"（売買）
+- station: 最寄り駅名（日本語のまま、必須）
 - walking_minutes: 徒歩分数（数値）
-- floor: 階数（整数のみ。地下の場合は負の整数、例: -1）
-- type: "rent"または"buy"
-- deposit: 敷金（数値、円単位、月数×賃料で計算。なしは0）
+- size: 専有面積または延床面積（数値、㎡）
+- land_area: 土地面積（数値、㎡。なければnull）
+- cap_rate: 利回り（数値、%。例: 5.5。なければnull）
+- building_age: 築年数（数値。なければnull）
+- rights: 権利関係（文字列。例: 所有権、借地権。なければnull）
+- land_type: 地目（文字列。例: 宅地、山林。なければnull）
+- zoning: 用途地域（文字列。例: 第一種住居地域。なければnull）
+- planning_area: 区域区分（文字列。例: 市街化区域。なければnull）
+- layout: 間取り（例: 1LDK, 2LDK）
+- beds: 部屋数（数値）
+- floor: 階数（整数のみ。地下の場合は負の整数）
+- management_fee: 管理費・共益費（数値、円単位）
+- deposit: 敷金（数値、円単位。なしは0）
 - key_money: 礼金（数値、円単位。なしは0）
+- initial_fees_credit_card: 初期費用クレジットカード払い可（true/false）
 - pet_friendly: ペット可（true/false）
 - foreign_friendly: 外国人可（true/false）
 - elevator: エレベーター有（true/false）
@@ -32,13 +35,6 @@ const SYSTEM_PROMPT = `あなたは不動産物件PDFを解析するAIです。P
 - south_facing: 南向き（true/false）
 - is_featured: false（デフォルト）
 - is_new: true（デフォルト）
-- category_no_key_money: 礼金なし（true/false）
-- category_luxury: 高級物件か（true/false、賃料30万以上など）
-- category_pet_friendly: ペット可カテゴリ（pet_friendlyと同じ）
-- category_for_students: 学生向けか（true/false）
-- category_for_families: ファミリー向けか（true/false）
-- category_designers: デザイナーズか（true/false）
-- category_high_rise_residence: タワーマンションか（true/false）
 - property_information: 物件の特記事項・備考（文字列）
 
 JSONのみ返すこと。`;
@@ -65,6 +61,36 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Max-Age": "86400",
 };
 
+/** クエリ ?filename=… を取得（URLSearchParams が % デコード済みなので decodeURIComponent は不要） */
+function filenameFromQuery(req: Request): string {
+  try {
+    const raw = req.url;
+    let params: URLSearchParams;
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      params = new URL(raw).searchParams;
+    } else {
+      const q = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+      params = new URLSearchParams(q);
+    }
+    return params.get("filename")?.trim() || "property.pdf";
+  } catch {
+    return "property.pdf";
+  }
+}
+
+/** Edge 上で PDF バイナリ → base64（JSON で送るよりボディが小さく、読み取りエラーを減らす） */
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (bytes.length === 0) return "";
+  let binary = "";
+  const step = 8192;
+  for (let i = 0; i < bytes.length; i += step) {
+    const end = Math.min(i + step, bytes.length);
+    const slice = bytes.subarray(i, end);
+    binary += String.fromCharCode.apply(null, Array.from(slice));
+  }
+  return btoa(binary);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -86,22 +112,77 @@ Deno.serve(async (req: Request) => {
 
   let base64: string;
   let filename: string;
-  try {
-    const body = await req.json();
-    base64 = body.base64;
-    filename = body.filename ?? "property.pdf";
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
 
-  if (!base64) {
-    return new Response(JSON.stringify({ error: "base64 is required" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
+
+  if (contentType.includes("application/json")) {
+    try {
+      const body = await req.json();
+      base64 = body.base64;
+      filename = body.filename ?? "property.pdf";
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!base64) {
+      return new Response(JSON.stringify({ error: "base64 is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+  } else if (contentType.includes("application/octet-stream") || contentType.includes("application/pdf")) {
+    const buf = await req.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (bytes.length === 0) {
+      return new Response(JSON.stringify({ error: "空の PDF です" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    base64 = uint8ArrayToBase64(bytes);
+    filename = filenameFromQuery(req);
+  } else if (contentType.includes("multipart/form-data")) {
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(JSON.stringify({ error: `multipart の読み取りに失敗: ${msg}` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const fileEntry = form.get("file");
+    if (!fileEntry || typeof fileEntry === "string") {
+      return new Response(JSON.stringify({ error: "file が必要です（multipart の file フィールド）" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const blob = fileEntry as Blob;
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (bytes.length === 0) {
+      return new Response(JSON.stringify({ error: "空の PDF です" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    base64 = uint8ArrayToBase64(bytes);
+    filename = fileEntry instanceof File ? fileEntry.name : "property.pdf";
+  } else {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Content-Type は application/json（base64）・application/octet-stream（生PDF）・multipart/form-data のいずれかにしてください",
+      }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 
   try {
@@ -174,8 +255,6 @@ Deno.serve(async (req: Request) => {
     }
     if (parsed.walking_minutes && parsed.walking_minutes > 60)
       warnings.push({ level: "warn", field: "walking_minutes", message: `徒歩${parsed.walking_minutes}分は異常に遠い` });
-    if (parsed.foreign_friendly === null || parsed.foreign_friendly === undefined)
-      warnings.push({ level: "warn", field: "foreign_friendly", message: "外国人可否が不明" });
     if (!parsed.latitude || !parsed.longitude)
       warnings.push({ level: "warn", field: "address", message: "住所から緯度経度を取得できませんでした（地図に表示されません）" });
 
