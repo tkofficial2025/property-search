@@ -7,6 +7,9 @@ import {
 import { Header } from '@/app/components/Header';
 import { supabase } from '@/lib/supabase';
 import { analyzePdfFile, type PropertyExtractedData, type AnalysisWarning } from '@/lib/analyze-pdf';
+import { extractPropertyFieldsFromText } from '@/lib/extract-property-fields-from-text';
+import { yearsToBuildingAgeBand, bandToRepresentativeYears } from '@/lib/buildingAgeBand';
+import { pickTextFromArrayOrScalar, sanitizePropertiesWritePayload } from '@/lib/properties';
 import type { Page } from '@/lib/routes';
 
 // ─── 型定義 ────────────────────────────────────────────────────────────────
@@ -22,6 +25,8 @@ type FormData = PropertyExtractedData & {
   image?: string;
   property_category?: string;
   region_group?: string;
+  /** DB の building_age_band をそのまま保持（自由記述のとき用） */
+  building_age_band?: string | null;
 };
 
 interface PropertyRow {
@@ -58,6 +63,17 @@ const PROPERTY_CATEGORIES = [
   { value: 'medical',   label: '病院・医療施設' },
 ] as const;
 
+/** 物件名に応じて property_category を推定（用地・土地 → ゴルフ → ホテル → 連続3桁以上の数字） */
+function inferPropertyCategoryFromTitle(title: string): string | undefined {
+  const t = String(title ?? '').trim();
+  if (!t) return undefined;
+  if (/(用地|土地)/.test(t)) return 'land';
+  if (/ゴルフ/.test(t)) return 'golf';
+  if (/ホテル/.test(t)) return 'hotel';
+  if (/\d{3,}/.test(t)) return 'room';
+  return undefined;
+}
+
 const SIDEBAR_ITEMS = [
   { id: 'pdf'    as Mode, label: 'PDF取り込み',   Icon: FileText  },
   { id: 'manual' as Mode, label: '手動登録',      Icon: PenLine   },
@@ -79,6 +95,34 @@ function buildPropertyInformation(formData: FormData): string {
   return parts.length > 0 ? `${parts.join(' ／ ')}${base ? '\n' + base : ''}` : base;
 }
 
+/** 備考にだけ書かれている既存データを、フォーム初期値用にざっくり解析 */
+function parseHintsFromPropertyInformation(base: string | null | undefined): Partial<FormData> {
+  const t = (base ?? '').trim();
+  if (!t) return {};
+  const out: Partial<FormData> = {};
+  const cap =
+    t.match(/(?:表面|想定|満室時|実質)?利回り[：:\s]*([0-9]+(?:\.[0-9]+)?)/) ||
+    t.match(/利回り[：:\s]*([0-9]+(?:\.[0-9]+)?)/);
+  if (cap) {
+    const n = parseFloat(cap[1]);
+    if (Number.isFinite(n)) out.cap_rate = n;
+  }
+  const age = t.match(/築年数[：:\s]*([0-9]{1,3})/) || t.match(/築\s*([0-9]{1,3})\s*年/);
+  if (age) {
+    const n = parseInt(age[1], 10);
+    if (Number.isFinite(n)) out.building_age = n;
+  }
+  const rightsM = t.match(/権利関係[：:\s]*([^\n／]+)/);
+  if (rightsM) out.rights = rightsM[1].trim();
+  const landM = t.match(/地目[：:\s]*([^\n／]+)/);
+  if (landM) out.land_type = landM[1].trim();
+  const zoneM = t.match(/用途地域[：:\s]*([^\n／]+)/);
+  if (zoneM) out.zoning = zoneM[1].trim();
+  const planM = t.match(/区域区分[：:\s]*([^\n／]+)/);
+  if (planM) out.planning_area = planM[1].trim();
+  return out;
+}
+
 function buildRow(formData: FormData) {
   return {
     title:                    formData.title    ?? '',
@@ -91,6 +135,10 @@ function buildRow(formData: FormData) {
     price:                    Number(formData.price)           || 0,
     beds:                     Number(formData.beds)            || 0,
     size:                     Number(formData.size)            || 0,
+    building_area_sqm:
+      formData.size != null && formData.size !== '' && Number.isFinite(Number(formData.size))
+        ? Number(formData.size)
+        : null,
     walking_minutes:          Number(formData.walking_minutes) || 0,
     floor:                    formData.floor          ? Number(formData.floor)          : null,
     management_fee:           formData.management_fee ? Number(formData.management_fee) : null,
@@ -110,11 +158,40 @@ function buildRow(formData: FormData) {
     is_new:                   formData.is_new                   ?? true,
     property_category:        formData.property_category || 'bldg',
     region_group:             formData.region_group      || 'tokyo23',
-    rights_relation:          [] as string[],
-    land_category:            [] as string[],
-    zoning_types:             [] as string[],
-    planning_areas:           [] as string[],
+    cap_rate:                 formData.cap_rate != null && formData.cap_rate !== '' ? Number(formData.cap_rate) : null,
+    ...(() => {
+      const ageNum =
+        formData.building_age != null && formData.building_age !== ''
+          ? Number(formData.building_age)
+          : NaN;
+      const fromAge = yearsToBuildingAgeBand(ageNum);
+      const rawBand =
+        formData.building_age_band != null ? String(formData.building_age_band).trim() : '';
+      const building_age_band = Number.isFinite(ageNum)
+        ? fromAge
+        : rawBand !== ''
+          ? rawBand
+          : null;
+      return { building_age_band };
+    })(),
     property_information:     buildPropertyInformation(formData) || null,
+    // ダッシュボードスキーマの text[]（マイグレーション 20260406130000 で追加）
+    ...(() => {
+      const rStr = formData.rights?.trim() || null;
+      const lStr = formData.land_type?.trim() || null;
+      const zStr = formData.zoning?.trim() || null;
+      const pStr = formData.planning_area?.trim() || null;
+      return {
+        rights_relation: rStr ? [rStr] : ([] as string[]),
+        land_category: lStr ? [lStr] : ([] as string[]),
+        zoning_types: zStr ? [zStr] : ([] as string[]),
+        planning_areas: pStr ? [pStr] : ([] as string[]),
+      };
+    })(),
+    land_area_sqm:
+      formData.land_area != null && formData.land_area !== '' && Number.isFinite(Number(formData.land_area))
+        ? Number(formData.land_area)
+        : null,
   };
 }
 
@@ -195,6 +272,7 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
   const [listLoading,     setListLoading]     = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleting,        setDeleting]        = useState(false);
+  const [enrichingId,     setEnrichingId]     = useState<number | null>(null);
 
   // ── 画像管理 ─────────────────────────────────────────────────────────────
   const [imgPropId,     setImgPropId]     = useState<number | ''>('');
@@ -243,7 +321,11 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
         b.id === item.id ? {
           ...b,
           status: 'extracted',
-          formData: { ...result.data, image: '' },
+          formData: (() => {
+            const base = { ...result.data, image: '' } as FormData;
+            const cat = inferPropertyCategoryFromTitle(String(base.title ?? ''));
+            return cat != null ? { ...base, property_category: cat } : base;
+          })(),
           warnings: result.warnings,
         } : b
       ));
@@ -391,7 +473,7 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
         const newPath = await uploadPropertyPdf(dupId, file);
         const { error: updErr } = await supabase
           .from('properties')
-          .update({ ...row, source_pdf_path: newPath })
+          .update(sanitizePropertiesWritePayload({ ...row, source_pdf_path: newPath }))
           .eq('id', dupId);
         if (updErr) {
           await supabase.storage.from('property-pdfs').remove([newPath]);
@@ -407,7 +489,7 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
       } else {
         const { dupId, row } = payload;
         setDuplicateModal(null);
-        const { error } = await supabase.from('properties').update(row).eq('id', dupId);
+        const { error } = await supabase.from('properties').update(sanitizePropertiesWritePayload(row)).eq('id', dupId);
         if (error) throw error;
         setManualStep('success');
         void fetchList();
@@ -445,7 +527,11 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
         const { error: delErr } = await supabase.from('properties').delete().eq('id', dupId);
         if (delErr) throw delErr;
 
-        const { data: inserted, error } = await supabase.from('properties').insert([row]).select('id').single();
+        const { data: inserted, error } = await supabase
+          .from('properties')
+          .insert([sanitizePropertiesWritePayload(row)])
+          .select('id')
+          .single();
         if (error) throw error;
         const pid = inserted?.id;
         if (pid == null) throw new Error('保存後に ID を取得できませんでした');
@@ -475,7 +561,7 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
         if (dupPdf) await supabase.storage.from('property-pdfs').remove([dupPdf]);
         const { error: delErr } = await supabase.from('properties').delete().eq('id', dupId);
         if (delErr) throw delErr;
-        const { error } = await supabase.from('properties').insert([row]);
+        const { error } = await supabase.from('properties').insert([sanitizePropertiesWritePayload(row)]);
         if (error) throw error;
         setManualStep('success');
         void fetchList();
@@ -501,7 +587,7 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
   const handleSave = async () => {
     setSaving(true); setErrorMsg(null);
     try {
-      const row = buildRow(formData);
+      const row = sanitizePropertiesWritePayload(buildRow(formData) as Record<string, unknown>);
       const ptype = (row.type as 'rent' | 'buy') || 'buy';
 
       if (editingId != null) {
@@ -531,6 +617,12 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
 
   const handleEditProperty = (prop: PropertyRow) => {
     const d = prop as Record<string, unknown>;
+    const bandFromDb =
+      d.building_age_band != null ? String(d.building_age_band).trim() : '';
+    const repFromBand = bandToRepresentativeYears(bandFromDb);
+    const hints = parseHintsFromPropertyInformation(
+      d.property_information != null ? String(d.property_information) : '',
+    );
     setFormData({
       title:                    String(d.title   ?? ''),
       address:                  String(d.address ?? ''),
@@ -540,7 +632,10 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
       image:                    String(d.image   ?? ''),
       price:                    Number(d.price)  || 0,
       beds:                     Number(d.beds)   || 0,
-      size:                     Number(d.size)   || 0,
+      size:
+        Number(d.size) ||
+        Number(d.building_area_sqm) ||
+        0,
       walking_minutes:          Number(d.walking_minutes) || 0,
       floor:                    d.floor          != null ? Number(d.floor)          : null,
       management_fee:           d.management_fee != null ? Number(d.management_fee) : null,
@@ -557,15 +652,74 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
       initial_fees_credit_card: Boolean(d.initial_fees_credit_card),
       is_featured:              Boolean(d.is_featured),
       is_new:                   Boolean(d.is_new),
-      property_category:        String(d.property_category ?? 'bldg'),
+      property_category: (() => {
+        const fromTitle = inferPropertyCategoryFromTitle(String(d.title ?? ''));
+        return fromTitle ?? String(d.property_category ?? 'bldg');
+      })(),
       region_group:             String(d.region_group      ?? 'tokyo23'),
       property_information:     d.property_information != null ? String(d.property_information) : null,
+      cap_rate:                 d.cap_rate != null && d.cap_rate !== '' ? Number(d.cap_rate) : hints.cap_rate,
+      building_age_band:
+        repFromBand != null ? undefined : bandFromDb !== '' ? bandFromDb : undefined,
+      building_age:
+        repFromBand ??
+        (d.building_age != null && d.building_age !== '' && Number.isFinite(Number(d.building_age))
+          ? Number(d.building_age)
+          : hints.building_age),
+      rights:                   pickTextFromArrayOrScalar(d, 'rights_relation', 'rights') ?? hints.rights,
+      land_type:                pickTextFromArrayOrScalar(d, 'land_category', 'land_type') ?? hints.land_type,
+      zoning:                   pickTextFromArrayOrScalar(d, 'zoning_types', 'zoning') ?? hints.zoning,
+      planning_area:            pickTextFromArrayOrScalar(d, 'planning_areas', 'planning_area') ?? hints.planning_area,
+      land_area:
+        d.land_area_sqm != null && d.land_area_sqm !== '' && Number.isFinite(Number(d.land_area_sqm))
+          ? Number(d.land_area_sqm)
+          : hints.land_area,
     });
     setEditingId(prop.id);
     setWarnings([]);
     setErrorMsg(null);
     setManualStep('form');
     setMode('manual');
+  };
+
+  const handleEnrichFromNotes = async (prop: PropertyRow) => {
+    const d = prop as Record<string, unknown>;
+    const text = d.property_information != null ? String(d.property_information).trim() : '';
+    if (!text) {
+      setErrorMsg('備考・特記事項が空のため解析できません。');
+      return;
+    }
+    setEnrichingId(prop.id);
+    setErrorMsg(null);
+    try {
+      const ex = await extractPropertyFieldsFromText(text);
+      const patch: Record<string, unknown> = { cap_rate: ex.cap_rate };
+      if (ex.rights != null && String(ex.rights).trim() !== '') {
+        patch.rights_relation = [String(ex.rights).trim()];
+      }
+      if (ex.land_type != null && String(ex.land_type).trim() !== '') {
+        patch.land_category = [String(ex.land_type).trim()];
+      }
+      if (ex.zoning != null && String(ex.zoning).trim() !== '') {
+        patch.zoning_types = [String(ex.zoning).trim()];
+      }
+      if (ex.planning_area != null && String(ex.planning_area).trim() !== '') {
+        patch.planning_areas = [String(ex.planning_area).trim()];
+      }
+      if (ex.building_age != null && Number.isFinite(Number(ex.building_age))) {
+        patch.building_age_band = yearsToBuildingAgeBand(Number(ex.building_age));
+      }
+      const { error } = await supabase
+        .from('properties')
+        .update(sanitizePropertiesWritePayload(patch))
+        .eq('id', prop.id);
+      if (error) throw error;
+      await fetchList();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : '備考からの抽出に失敗しました');
+    } finally {
+      setEnrichingId(null);
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -746,8 +900,18 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">物件名</label>
-              <input type="text" value={data.title ?? ''} onChange={e => update('title', e.target.value)}
-                className={inputClass} placeholder="例: ザ・パークハウス高輪タワー 2005号室" />
+              <input
+                type="text"
+                value={data.title ?? ''}
+                onChange={e => {
+                  const v = e.target.value;
+                  update('title', v);
+                  const cat = inferPropertyCategoryFromTitle(v);
+                  if (cat != null) update('property_category', cat);
+                }}
+                className={inputClass}
+                placeholder="例: ザ・パークハウス高輪タワー 2005号室"
+              />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">メイン画像URL</label>
@@ -1170,10 +1334,16 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
           {/* ═══ 物件一覧・編集・削除 ═══ */}
           {mode === 'list' && (
             <>
+              {errorMsg && (
+                <div className="mb-4 flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 whitespace-pre-wrap">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  {errorMsg}
+                </div>
+              )}
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 mb-1">物件一覧</h1>
-                  <p className="text-sm text-gray-500">登録済みの物件を編集・削除できます。</p>
+                  <p className="text-sm text-gray-500">登録済みの物件を編集・削除できます。備考・特記事項のみに情報がある場合は「備考→項目」でAIが利回り等のカラムに反映します。</p>
                 </div>
                 <button type="button" onClick={fetchList} disabled={listLoading}
                   className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
@@ -1235,6 +1405,19 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
                         </div>
                       ) : (
                         <div className="flex flex-wrap gap-2 justify-end flex-shrink-0 w-full sm:w-auto pt-1 border-t border-gray-100 sm:border-t-0 sm:pt-0 sm:pl-0">
+                          <button
+                            type="button"
+                            disabled={enrichingId === prop.id}
+                            onClick={() => { void handleEnrichFromNotes(prop); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-200 text-amber-800 text-xs font-medium rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-60"
+                          >
+                            {enrichingId === prop.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            )}
+                            備考→項目
+                          </button>
                           <button type="button" onClick={() => handleEditProperty(prop)}
                             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50 transition-colors">
                             <Edit2 className="w-3.5 h-3.5" /> 編集

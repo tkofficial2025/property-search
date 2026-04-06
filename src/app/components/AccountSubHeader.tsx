@@ -1,8 +1,8 @@
-import { Heart, Calendar, User, LogOut, PlusCircle } from 'lucide-react';
+import { Calendar, User, LogOut, PlusCircle } from 'lucide-react';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import type { Page } from '@/lib/routes';
 
-type AccountPage = 'favorites' | 'activity' | 'profile' | 'register';
+type AccountPage = 'activity' | 'profile' | 'register';
 
 interface AccountSubHeaderProps {
   currentPage: AccountPage;
@@ -22,14 +22,6 @@ export function AccountSubHeader({ currentPage, onNavigate, userName, onLogout }
     <div className="md:hidden sticky top-14 z-20 bg-gray-100 border-b border-gray-200 px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <nav className="flex items-center gap-1 overflow-x-auto min-w-0">
-          <button
-            type="button"
-            onClick={() => onNavigate('favorites')}
-            className={`${baseClass} ${currentPage === 'favorites' ? activeClass : inactiveClass}`}
-          >
-            <Heart className="w-4 h-4 flex-shrink-0" />
-            {t('account.favorites')}
-          </button>
           <button
             type="button"
             onClick={() => onNavigate('activity')}

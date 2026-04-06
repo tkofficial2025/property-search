@@ -4,6 +4,9 @@ const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
 const SYSTEM_PROMPT = `あなたは不動産物件PDFを解析するAIです。PDFから以下のフィールドを抽出し、必ずJSONのみを返してください。前置きや説明は不要です。
 
+【重要】表・概要欄だけでなく、必ず「備考」「特記事項」「その他」「注意事項」「コメント」「物件概要の補足」などの自由記述欄も読んでください。
+そこに書かれた表面利回り・想定利回り・NOI利回り・満室時利回り、築年・築年月・竣工年、権利・地目・用途地域・市街化区域などは、本文に無くても必ず対応するJSONキーに入れてください（数値は数値型で）。
+
 抽出フィールド（存在しない場合はnullを使用）:
 - title: 物件名（日本語のまま、必須）
 - address: 住所（日本語のまま、都道府県から、必須）
@@ -13,8 +16,8 @@ const SYSTEM_PROMPT = `あなたは不動産物件PDFを解析するAIです。P
 - walking_minutes: 徒歩分数（数値）
 - size: 専有面積または延床面積（数値、㎡）
 - land_area: 土地面積（数値、㎡。なければnull）
-- cap_rate: 利回り（数値、%。例: 5.5。なければnull）
-- building_age: 築年数（数値。なければnull）
+- cap_rate: 利回り（数値、%。表面/想定/満室時など分かるもの。備考にのみあっても必ず抽出）
+- building_age: 築年数（数値・年。築年月・竣工年から換算可。備考にのみあっても抽出）
 - rights: 権利関係（文字列。例: 所有権、借地権。なければnull）
 - land_type: 地目（文字列。例: 宅地、山林。なければnull）
 - zoning: 用途地域（文字列。例: 第一種住居地域。なければnull）
@@ -35,7 +38,7 @@ const SYSTEM_PROMPT = `あなたは不動産物件PDFを解析するAIです。P
 - south_facing: 南向き（true/false）
 - is_featured: false（デフォルト）
 - is_new: true（デフォルト）
-- property_information: 物件の特記事項・備考（文字列）
+- property_information: 物件の特記事項・備考（文字列。PDFの備考欄を要約・転記。上記で既に埋めた数値・区分はここでも言及してよい）
 
 JSONのみ返すこと。`;
 
@@ -195,7 +198,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: "claude-opus-4-5",
-        max_tokens: 2000,
+        max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -225,6 +228,21 @@ Deno.serve(async (req: Request) => {
     const clean = text.replace(/```json|```/g, "").trim();
     // deno-lint-ignore no-explicit-any
     const parsed: Record<string, any> = JSON.parse(clean);
+
+    const coerceNum = (v: unknown): number | null => {
+      if (v == null || v === "") return null;
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      const n = parseFloat(String(v).replace(/,/g, "").trim());
+      return Number.isFinite(n) ? n : null;
+    };
+    const coerceIfString = (v: unknown): unknown => (typeof v === "string" ? coerceNum(v) : v);
+    parsed.cap_rate = coerceNum(parsed.cap_rate);
+    parsed.building_age = coerceNum(parsed.building_age);
+    parsed.land_area = coerceNum(parsed.land_area);
+    parsed.price = coerceIfString(parsed.price);
+    parsed.size = coerceIfString(parsed.size);
+    parsed.walking_minutes = coerceIfString(parsed.walking_minutes);
+    parsed.floor = coerceIfString(parsed.floor);
 
     if (parsed.address && (!parsed.latitude || !parsed.longitude)) {
       const geo = await geocodeAddress(parsed.address);

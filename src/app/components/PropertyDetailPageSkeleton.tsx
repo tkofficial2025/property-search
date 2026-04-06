@@ -44,7 +44,7 @@ export function PropertyDetailPageSkeleton({ onNavigate, currentPage = 'buy' }: 
             {/* Address */}
             <Skeleton className="h-5 w-3/4 max-w-md" />
 
-            {/* Title + favorite */}
+            {/* Title */}
             <div className="flex flex-wrap items-start justify-between gap-4">
               <Skeleton className="h-9 w-64 md:w-96" />
               <Skeleton className="h-10 w-10 rounded-full" />

@@ -102,6 +102,120 @@ function matchesWalkDistance(property: Property, stationDistance?: string): bool
   return true;
 }
 
+function propertyHaystack(p: Property): string {
+  return [p.title, p.propertyInformation, p.rights, p.landType, p.zoning, p.planningArea]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+/** DBの cap_rate または備考・特記の文言から利回り%を推定 */
+function resolvedCapRatePercent(p: Property): number | null {
+  if (p.capRate != null && Number.isFinite(p.capRate)) return p.capRate;
+  const t = p.propertyInformation ?? '';
+  const m =
+    t.match(/(?:表面|想定|満室時|実質|現行)?利回り[：:\s]*([0-9]+(?:\.[0-9]+)?)/i) ||
+    t.match(/利回り[：:\s]*([0-9]+(?:\.[0-9]+)?)/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mentionsCapRateLoosely(p: Property): boolean {
+  return /利回り/.test(p.propertyInformation ?? '');
+}
+
+function resolvedBuildingAgeYears(p: Property): number | null {
+  const t = p.propertyInformation ?? '';
+  const m =
+    t.match(/築年数[：:\s]*([0-9]{1,3})/) ||
+    t.match(/築\s*([0-9]{1,3})\s*年/) ||
+    t.match(/築([0-9]{1,3})\s*年/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function mentionsBuildingLoosely(p: Property): boolean {
+  return /築\s*[0-9]|築年数|築年月|竣工|新築/.test(p.propertyInformation ?? '');
+}
+
+function matchesCapRateFilter(p: Property, capRate: string): boolean {
+  const v = resolvedCapRatePercent(p);
+  if (capRate === 'none') return v == null && !mentionsCapRateLoosely(p);
+  if (v == null) return false;
+  if (capRate === 'up-to-5') return v <= 5;
+  if (capRate === '5-7') return v > 5 && v <= 7;
+  if (capRate === '7-10') return v > 7 && v <= 10;
+  if (capRate === '10-plus') return v > 10;
+  return true;
+}
+
+function matchesBuildingAgeFilter(p: Property, buildingAge: string): boolean {
+  const band = p.buildingAgeBand?.trim();
+  if (band && band === buildingAge) return true;
+  const age = resolvedBuildingAgeYears(p);
+  const hay = propertyHaystack(p);
+  if (buildingAge === 'unknown') {
+    return !band && age == null && !mentionsBuildingLoosely(p);
+  }
+  if (buildingAge === 'no-building') {
+    return band === 'no-building' || includesAny(hay, ['土地のみ', '建物なし', '更地', '未建築']);
+  }
+  if (age == null) return false;
+  if (buildingAge === 'new-5') return age <= 5;
+  if (buildingAge === '6-10') return age >= 6 && age <= 10;
+  if (buildingAge === '11-20') return age >= 11 && age <= 20;
+  if (buildingAge === '21-30') return age >= 21 && age <= 30;
+  if (buildingAge === '31-plus') return age >= 31;
+  return true;
+}
+
+const RIGHTS_KEYWORDS: Record<string, string[]> = {
+  'full-ownership': ['所有権', '完全所有'],
+  leasehold: ['借地', '賃借権', '地上権', '定期借地'],
+  'bare-land': ['底地'],
+  'condo-ownership': ['区分所有'],
+  shared: ['共有', '持分'],
+};
+
+const LAND_KEYWORDS: Record<string, string[]> = {
+  residential: ['宅地'],
+  farm: ['田', '畑', '農地'],
+  forest: ['山林', '原野'],
+  misc: ['雑種地'],
+  other: [],
+};
+
+const ZONING_KEYWORDS: Record<string, string[]> = {
+  'residential-low': ['第一種低層住居専用'],
+  'residential-mid': ['第一種中高層住居専用'],
+  'residential-1': ['第一種住居地域'],
+  'semi-residential': ['準住居地域'],
+  'neighborhood-commercial': ['近隣商業地域'],
+  commercial: ['商業地域'],
+  'semi-industrial': ['準工業地域'],
+  industrial: ['工業地域'],
+  'industrial-exclusive': ['工業専用地域'],
+  unspecified: ['未指定'],
+};
+
+const PLANNING_KEYWORDS: Record<string, string[]> = {
+  urbanized: ['市街化区域'],
+  'urbanization-control': ['市街化調整区域'],
+  'non-zoned': ['非線引き'],
+};
+
+function matchesKeywordCode(p: Property, code: string, map: Record<string, string[]>): boolean {
+  const kws = map[code];
+  const hay = propertyHaystack(p);
+  if (!kws?.length) {
+    if (code === 'other') return includesAny(hay, ['その他', '他']);
+    return false;
+  }
+  return includesAny(hay, kws.map((w) => w.toLowerCase()));
+}
+
 /**
  * ヒーロー検索パラメータで物件一覧をフィルタ
  */
@@ -117,7 +231,7 @@ export function filterPropertiesByHeroParams(
   if (params.keyword && params.keyword.trim()) {
     const q = params.keyword.trim().toLowerCase();
     list = list.filter((p) => {
-      const hay = `${p.title ?? ''} ${p.address ?? ''} ${p.station ?? ''} ${p.propertyInformation ?? ''}`.toLowerCase();
+      const hay = `${p.title ?? ''} ${p.address ?? ''} ${p.station ?? ''} ${p.propertyInformation ?? ''} ${p.rights ?? ''} ${p.landType ?? ''} ${p.zoning ?? ''} ${p.planningArea ?? ''} ${p.capRate != null ? String(p.capRate) : ''} ${p.buildingAgeBand ?? ''} ${p.landAreaSqm != null ? String(p.landAreaSqm) : ''}`.toLowerCase();
       return hay.includes(q);
     });
   }
@@ -155,26 +269,31 @@ export function filterPropertiesByHeroParams(
   if (params.buildingAreaMax != null && params.buildingAreaMax > 0) {
     list = list.filter((p) => p.size <= toSquareMeter(params.buildingAreaMax!, params.buildingAreaUnit));
   }
+  const landSqm = (p: Property) => p.landAreaSqm ?? p.size;
   if (params.landAreaMin != null && params.landAreaMin > 0) {
-    list = list.filter((p) => p.size >= toSquareMeter(params.landAreaMin!, params.landAreaUnit));
+    list = list.filter((p) => landSqm(p) >= toSquareMeter(params.landAreaMin!, params.landAreaUnit));
   }
   if (params.landAreaMax != null && params.landAreaMax > 0) {
-    list = list.filter((p) => p.size <= toSquareMeter(params.landAreaMax!, params.landAreaUnit));
+    list = list.filter((p) => landSqm(p) <= toSquareMeter(params.landAreaMax!, params.landAreaUnit));
   }
 
-  const textFilters = [
-    ...(params.capRate ? [params.capRate] : []),
-    ...(params.buildingAge ? [params.buildingAge] : []),
-    ...(params.rights ?? []),
-    ...(params.landTypes ?? []),
-    ...(params.zoningTypes ?? []),
-    ...(params.planningAreas ?? []),
-  ];
-  if (textFilters.length > 0) {
-    list = list.filter((p) => {
-      const hay = `${p.title} ${p.propertyInformation ?? ''}`.toLowerCase();
-      return textFilters.some((token) => hay.includes(String(token).toLowerCase()));
-    });
+  if (params.capRate) {
+    list = list.filter((p) => matchesCapRateFilter(p, params.capRate!));
+  }
+  if (params.buildingAge) {
+    list = list.filter((p) => matchesBuildingAgeFilter(p, params.buildingAge!));
+  }
+  if (params.rights && params.rights.length > 0) {
+    list = list.filter((p) => params.rights!.some((code) => matchesKeywordCode(p, code, RIGHTS_KEYWORDS)));
+  }
+  if (params.landTypes && params.landTypes.length > 0) {
+    list = list.filter((p) => params.landTypes!.some((code) => matchesKeywordCode(p, code, LAND_KEYWORDS)));
+  }
+  if (params.zoningTypes && params.zoningTypes.length > 0) {
+    list = list.filter((p) => params.zoningTypes!.some((code) => matchesKeywordCode(p, code, ZONING_KEYWORDS)));
+  }
+  if (params.planningAreas && params.planningAreas.length > 0) {
+    list = list.filter((p) => params.planningAreas!.some((code) => matchesKeywordCode(p, code, PLANNING_KEYWORDS)));
   }
 
   return list;

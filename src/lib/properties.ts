@@ -36,6 +36,19 @@ export interface SupabasePropertyRow {
   /** Storage `property-pdfs` バケット内パス */
   source_pdf_path?: string | null;
   property_category?: string | null;
+  cap_rate?: number | null;
+  building_age_band?: string | null;
+  /** ダッシュボード等のレガシー text[] と、マイグレーション追加の text の両方があり得る */
+  rights_relation?: string[] | null;
+  land_category?: string[] | null;
+  zoning_types?: string[] | null;
+  planning_areas?: string[] | null;
+  rights?: string | null;
+  land_type?: string | null;
+  zoning?: string | null;
+  planning_area?: string | null;
+  building_area_sqm?: number | null;
+  land_area_sqm?: number | null;
 }
 
 /**
@@ -75,6 +88,87 @@ export interface Property {
   /** PDF 取り込み時に保存した元ファイル（Storage パス） */
   sourcePdfPath?: string | null;
   propertyCategory?: string;
+  capRate?: number;
+  /** 築年バンド（フィルタ値と同一キー推奨） */
+  buildingAgeBand?: string;
+  rights?: string;
+  landType?: string;
+  zoning?: string;
+  planningArea?: string;
+  /** DB の land_area_sqm（㎡）。無い場合は土地面積フィルタで size にフォールバック */
+  landAreaSqm?: number;
+}
+
+/**
+ * DB の text[]（rights_relation 等）を優先し、無ければ text スカラ（rights 等）を使う
+ */
+export function pickTextFromArrayOrScalar(
+  row: Record<string, unknown>,
+  arrayKey: string,
+  scalarKey: string,
+): string | undefined {
+  const arr = row[arrayKey];
+  if (Array.isArray(arr) && arr.length > 0) {
+    const s = (arr as unknown[])
+      .map((x) => String(x ?? '').trim())
+      .filter(Boolean)
+      .join(' ');
+    if (s) return s;
+  }
+  const v = row[scalarKey];
+  if (v != null && String(v).trim() !== '') return String(v).trim();
+  return undefined;
+}
+
+const PROPERTIES_WRITE_WHITELIST = new Set([
+  'title',
+  'address',
+  'type',
+  'station',
+  'layout',
+  'image',
+  'images',
+  'price',
+  'beds',
+  'size',
+  'building_area_sqm',
+  'walking_minutes',
+  'floor',
+  'management_fee',
+  'deposit',
+  'key_money',
+  'latitude',
+  'longitude',
+  'pet_friendly',
+  'foreign_friendly',
+  'elevator',
+  'delivery_box',
+  'balcony',
+  'bicycle_parking',
+  'south_facing',
+  'initial_fees_credit_card',
+  'is_featured',
+  'is_new',
+  'property_category',
+  'region_group',
+  'cap_rate',
+  'building_age_band',
+  'property_information',
+  'rights_relation',
+  'land_category',
+  'zoning_types',
+  'planning_areas',
+  'land_area_sqm',
+  'source_pdf_path',
+]);
+
+/** `properties` への insert/update 用。DB に無い列（land_type 等）が混ざらないようホワイトリストで絞る */
+export function sanitizePropertiesWritePayload(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (PROPERTIES_WRITE_WHITELIST.has(k)) out[k] = v;
+  }
+  return out;
 }
 
 /** 行オブジェクトから値を取得（snake_case / camelCase 両対応） */
@@ -139,7 +233,7 @@ export function mapSupabaseRowToProperty(row: SupabasePropertyRow | Record<strin
     address: String(get(r, 'address') ?? ''),
     price: Number(get(r, 'price') ?? 0),
     beds: Number(get(r, 'beds') ?? 0),
-    size: Number(get(r, 'size') ?? 0),
+    size: Number(get(r, 'size', 'building_area_sqm') ?? 0),
     layout: String(get(r, 'layout') ?? ''),
     image: toDirectImageUrl(imageStr || (images[0] ?? '')),
     station: String(get(r, 'station') ?? ''),
@@ -179,6 +273,17 @@ export function mapSupabaseRowToProperty(row: SupabasePropertyRow | Record<strin
       if (v == null || String(v).trim() === '') return undefined;
       return String(v).trim();
     })(),
+    capRate: toOptionalNumber(get(r, 'cap_rate', 'capRate')),
+    buildingAgeBand: (() => {
+      const v = get(r, 'building_age_band', 'buildingAgeBand');
+      if (v == null || String(v).trim() === '') return undefined;
+      return String(v).trim();
+    })(),
+    rights: pickTextFromArrayOrScalar(r, 'rights_relation', 'rights'),
+    landType: pickTextFromArrayOrScalar(r, 'land_category', 'land_type'),
+    zoning: pickTextFromArrayOrScalar(r, 'zoning_types', 'zoning'),
+    planningArea: pickTextFromArrayOrScalar(r, 'planning_areas', 'planning_area'),
+    landAreaSqm: toOptionalNumber(get(r, 'land_area_sqm', 'landAreaSqm')),
   };
 }
 
@@ -223,7 +328,7 @@ export function mapSupabaseRowToFeaturedProperty(row: SupabasePropertyRow | Reco
     image: String(get(r, 'image') ?? ''),
     beds: Number(get(r, 'beds') ?? 0),
     baths: 1,
-    size: `${Number(get(r, 'size') ?? 0)}㎡`,
+    size: `${Number(get(r, 'size', 'building_area_sqm') ?? 0)}㎡`,
     station: String(get(r, 'station') ?? ''),
     walkingMinutes: toNumber(get(r, 'walking_minutes', 'walkingMinutes')),
     sourcePdfPath,

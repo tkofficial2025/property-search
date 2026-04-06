@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
 import {
-  Heart,
   Bed,
   Maximize2,
   MapPin,
@@ -67,7 +66,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
       return next;
     });
   };
-  const [favorites, setFavorites] = useState<Set<number>>(new Set());
   const [allProperties, setAllProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,16 +137,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
 
   // 並び替え適用
   const sortedProperties = sortProperties(properties, effectiveSortOption);
-
-  const toggleFavorite = (id: number) => {
-    const newFavorites = new Set(favorites);
-    if (newFavorites.has(id)) {
-      newFavorites.delete(id);
-    } else {
-      newFavorites.add(id);
-    }
-    setFavorites(newFavorites);
-  };
 
   // サイドバーリサイズ処理
   useEffect(() => {
@@ -364,9 +352,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                               {property.isFeatured && <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>}
                               {isNewBadge(property) && <span className="px-2 py-0.5 bg-white text-gray-900 text-xs font-semibold rounded-full">{t('listing.badge.new')}</span>}
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); toggleFavorite(property.id); }} className="absolute top-2 right-2 w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all hover:scale-110 z-10">
-                              <Heart className={`w-4 h-4 ${favorites.has(property.id) ? 'fill-[#C1121F] text-[#C1121F]' : 'text-gray-700'}`} />
-                            </button>
                             <div className="absolute bottom-0 left-0 right-0 p-3">
                               <h3 className={`text-base font-bold text-white mb-1 line-clamp-1 ${property.isFeatured ? 'pt-10' : ''}`}>{displayTitle}</h3>
                               <p className="text-white/80 text-xs mb-2 line-clamp-1">{displayAddress}</p>
@@ -399,9 +384,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                             {property.isFeatured && <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>}
                             {isNewBadge(property) && <span className="px-2 py-0.5 bg-white text-gray-900 text-xs font-semibold rounded-full">{t('listing.badge.new')}</span>}
                           </div>
-                          <button onClick={(e) => { e.stopPropagation(); toggleFavorite(property.id); }} className="absolute top-2 right-2 w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all hover:scale-110 z-10">
-                            <Heart className={`w-4 h-4 ${favorites.has(property.id) ? 'fill-[#C1121F] text-[#C1121F]' : 'text-gray-700'}`} />
-                          </button>
                           <div className="absolute bottom-0 left-0 right-0 p-3">
                             <h3 className={`text-base font-bold text-white mb-1 line-clamp-1 ${property.isFeatured ? 'pt-10' : ''}`}>{displayTitle}</h3>
                             <p className="text-white/80 text-xs mb-2 line-clamp-1">{displayAddress}</p>
@@ -556,9 +538,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                               {property.isFeatured && <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>}
                               {isNewBadge(property) && <span className="px-2 py-0.5 bg-white text-gray-900 text-xs font-semibold rounded-full">{t('listing.badge.new')}</span>}
                             </div>
-                            <button onClick={(e) => { e.stopPropagation(); toggleFavorite(property.id); }} className="absolute top-2 right-2 w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all hover:scale-110 z-10">
-                              <Heart className={`w-4 h-4 ${favorites.has(property.id) ? 'fill-[#C1121F] text-[#C1121F]' : 'text-gray-700'}`} />
-                            </button>
                             <div className="absolute bottom-0 left-0 right-0 p-3">
                               <h3 className={`text-base font-bold text-white mb-1 line-clamp-1 ${property.isFeatured ? 'pt-10' : ''}`}>{displayTitle}</h3>
                               <p className="text-white/80 text-xs mb-2 line-clamp-1">{displayAddress}</p>
@@ -591,9 +570,6 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                             {property.isFeatured && <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>}
                             {isNewBadge(property) && <span className="px-2 py-0.5 bg-white text-gray-900 text-xs font-semibold rounded-full">{t('listing.badge.new')}</span>}
                           </div>
-                          <button onClick={(e) => { e.stopPropagation(); toggleFavorite(property.id); }} className="absolute top-2 right-2 w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white transition-all hover:scale-110 z-10">
-                            <Heart className={`w-4 h-4 ${favorites.has(property.id) ? 'fill-[#C1121F] text-[#C1121F]' : 'text-gray-700'}`} />
-                          </button>
                           <div className="absolute bottom-0 left-0 right-0 p-3">
                             <h3 className={`text-base font-bold text-white mb-1 line-clamp-1 ${property.isFeatured ? 'pt-10' : ''}`}>{displayTitle}</h3>
                             <p className="text-white/80 text-xs mb-2 line-clamp-1">{displayAddress}</p>

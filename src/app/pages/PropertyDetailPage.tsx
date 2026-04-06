@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import {
-  Heart,
   MapPin,
   Bed,
   Maximize2,
@@ -38,9 +37,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [favorite, setFavorite] = useState(false);
-  const [favoriteLoading, setFavoriteLoading] = useState(false);
-  const [favoriteMessage, setFavoriteMessage] = useState<'added' | 'removed' | 'error' | null>(null);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   useEffect(() => {
@@ -65,55 +61,6 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
     }
     fetchProperty();
   }, [propertyId]);
-
-  useEffect(() => {
-    async function checkFavorite() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from('user_favorites')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('property_id', propertyId)
-        .maybeSingle();
-      setFavorite(!!data);
-    }
-    checkFavorite();
-  }, [propertyId]);
-
-  const toggleFavorite = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setFavoriteLoading(true);
-    setFavoriteMessage(null);
-    if (favorite) {
-      const { error: err } = await supabase
-        .from('user_favorites')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('property_id', propertyId);
-      if (err) {
-        setFavoriteMessage('error');
-      } else {
-        setFavorite(false);
-        setFavoriteMessage('removed');
-      }
-    } else {
-      const { error: err } = await supabase.from('user_favorites').insert({
-        user_id: user.id,
-        property_id: propertyId,
-        type: source,
-      });
-      if (err) {
-        setFavoriteMessage('error');
-      } else {
-        setFavorite(true);
-        setFavoriteMessage('added');
-      }
-    }
-    setFavoriteLoading(false);
-    setTimeout(() => setFavoriteMessage((m) => (m === 'error' ? m : null)), 3000);
-  };
 
   if (loading) {
     return (
@@ -240,29 +187,7 @@ export function PropertyDetailPage({ propertyId, source, onNavigate, onBack }: P
 
             {/* Location + Title + Station */}
             <p className="text-gray-600">{displayAddress}</p>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">{displayTitle}</h1>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleFavorite}
-                  disabled={favoriteLoading}
-                  className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-60"
-                  aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                  <Heart className={`w-5 h-5 ${favorite ? 'fill-[#C1121F] text-[#C1121F]' : 'text-gray-600'}`} />
-                </button>
-              </div>
-              {favoriteMessage === 'added' && (
-                <p className="text-sm text-green-600 mt-2">{t('property.favorite.added')}</p>
-              )}
-              {favoriteMessage === 'removed' && (
-                <p className="text-sm text-gray-500 mt-2">{t('property.favorite.removed')}</p>
-              )}
-              {favoriteMessage === 'error' && (
-                <p className="text-sm text-red-600 mt-2">{t('property.favorite.error')}</p>
-              )}
-            </div>
+            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">{displayTitle}</h1>
             <div className="flex flex-wrap gap-3">
               <div className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg text-sm">
                 <MapPin className="w-4 h-4 text-gray-600 flex-shrink-0" />
