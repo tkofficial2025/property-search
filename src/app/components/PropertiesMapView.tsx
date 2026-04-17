@@ -4,13 +4,12 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import Supercluster from 'supercluster';
 import { geocodeAddresses, type Coordinates } from '@/lib/geocoding';
-import { type Property } from '@/lib/properties';
+import { type Property, getListingCardImageUrls } from '@/lib/properties';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { useLanguage } from '@/app/contexts/LanguageContext';
 import { getStationDisplay, type Language } from '@/lib/stationNames';
 import { getTileLayerConfig, getMaptilerApiKey } from '@/lib/mapTiles';
 import { MapTilerLayer } from '@/app/components/MapTilerLayer';
-import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { StationLineLogo } from '@/app/components/StationLineLogo';
 import { fixLeafletDefaultIcon } from '@/lib/leafletDefaultIcon';
 
@@ -183,8 +182,9 @@ function ClusterUpdater({
           });
 
           // ホバー用のTooltip（HTML文字列）
-          const imageHtml = property.image 
-            ? `<img src="${property.image}" alt="${displayTitle}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" onerror="this.style.display='none';" />`
+          const thumbUrl = getListingCardImageUrls(property)[0];
+          const imageHtml = thumbUrl
+            ? `<img src="${thumbUrl}" alt="${displayTitle}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0;" onerror="this.style.display='none';" />`
             : '';
           const tooltipHtml = `
             <div style="min-width: 280px; max-width: 400px; padding: 10px; box-sizing: border-box; word-wrap: break-word; overflow-wrap: break-word;">

@@ -1,7 +1,5 @@
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, ArrowRight, MapPin, FileDown } from 'lucide-react';
-import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { getPropertyImageUrl } from '@/lib/propertyImageUrl';
 import { useRef, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
@@ -187,28 +185,16 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                 whileHover={{ y: -8 }}
               >
                 <div className="bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
-                  {/* Property Image */}
-                  <div className="relative h-56 overflow-hidden">
-                    <ImageWithFallback
-                      src={getPropertyImageUrl(property.image, 'listing')}
-                      alt={property.title}
-                      className="w-full h-full object-cover group-hover/card:scale-110 transition-transform duration-500"
-                      loading="lazy"
-                    />
-                    {/* Type Badge */}
+                  <div className="p-6">
                     <div
-                      className={`absolute top-4 left-4 px-3 py-1.5 rounded-lg text-sm font-semibold ${
+                      className={`inline-block mb-3 px-3 py-1.5 rounded-lg text-sm font-semibold ${
                         property.type === 'Buy'
                           ? 'bg-[#C1121F] text-white'
-                          : 'bg-white text-gray-900'
+                          : 'bg-gray-100 text-gray-900'
                       }`}
                     >
                       {t('activity.for_sale')}
                     </div>
-                  </div>
-
-                  {/* Property Details */}
-                  <div className="p-6">
                     <h3 className="text-xl font-semibold text-gray-900 mb-1 group-hover/card:text-[#C1121F] transition-colors">
                       {property.title}
                     </h3>
@@ -226,7 +212,7 @@ export function FeaturedPropertiesCarousel({ onSelectProperty, onViewAllClick, t
                     {/* Price */}
                     <div className="flex items-baseline justify-between mb-4 pb-4 border-b border-gray-100">
                       <span className="text-2xl font-bold text-gray-900">
-                        {formatPrice(property.priceYen, 'buy')}
+                        {formatPrice(property.priceYen, property.type === 'Buy' ? 'buy' : 'rent')}
                       </span>
                     </div>
 

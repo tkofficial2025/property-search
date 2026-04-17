@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { formatJpyPriceDisplay } from '@/lib/formatJpyPrice';
 
 const FX_CACHE_KEY = 'fx_rates';
 const FX_API = 'https://api.frankfurter.app/latest?from=JPY&to=USD,CNY,KRW,AUD,CAD';
@@ -155,7 +156,6 @@ export function CurrencyProvider({ children, language = 'ja' }: { children: Reac
   }, []);
 
   const rentSuffix = '/月'; // 常に日本語
-  const useWan = true; // 日本語では万単位を使用
   const setCurrency = useCallback((_: Currency) => {
     setCurrencyState('JPY');
   }, []);
@@ -163,19 +163,7 @@ export function CurrencyProvider({ children, language = 'ja' }: { children: Reac
   const formatPrice = useCallback<CurrencyContextValue['formatPrice']>(
     (priceYen, type) => {
       if (currency === 'JPY') {
-        if (useWan && priceYen >= 10000) {
-          const wan = priceYen / 10000;
-          const wanStr = wan === Math.floor(wan) ? wan.toFixed(0) : wan.toFixed(1);
-          return type === 'rent' ? `¥${wanStr}万${rentSuffix}` : `¥${wanStr}万`;
-        }
-        if (!useWan) {
-          if (type === 'rent') {
-            if (priceYen >= 100000) return `¥${(priceYen / 1000).toFixed(0)}k${rentSuffix}`;
-            return `¥${priceYen.toLocaleString()}${rentSuffix}`;
-          }
-          if (priceYen >= 1000000) return `¥${(priceYen / 1000000).toFixed(1)}M`;
-        }
-        return type === 'rent' ? `¥${priceYen.toLocaleString()}${rentSuffix}` : `¥${priceYen.toLocaleString()}`;
+        return formatJpyPriceDisplay(priceYen, type);
       }
       
       if (currency === 'USD') {
@@ -237,7 +225,7 @@ export function CurrencyProvider({ children, language = 'ja' }: { children: Reac
       
       return `¥${priceYen.toLocaleString()}`;
     },
-    [currency, jpyPerUsd, jpyPerCny, jpyPerKrw, jpyPerAud, jpyPerCad, rentSuffix, useWan]
+    [currency, jpyPerUsd, jpyPerCny, jpyPerKrw, jpyPerAud, jpyPerCad, rentSuffix]
   );
 
   const value = useMemo<CurrencyContextValue>(

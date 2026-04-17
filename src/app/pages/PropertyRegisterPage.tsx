@@ -11,6 +11,7 @@ import { extractPropertyFieldsFromText } from '@/lib/extract-property-fields-fro
 import { yearsToBuildingAgeBand, bandToRepresentativeYears } from '@/lib/buildingAgeBand';
 import { pickTextFromArrayOrScalar, sanitizePropertiesWritePayload } from '@/lib/properties';
 import type { Page } from '@/lib/routes';
+import { useCurrency } from '@/app/contexts/CurrencyContext';
 
 // ─── 型定義 ────────────────────────────────────────────────────────────────
 type Mode      = 'pdf' | 'manual' | 'list' | 'images';
@@ -242,6 +243,7 @@ async function uploadPropertyPdf(propertyId: number, file: File): Promise<string
 
 // ─── メインコンポーネント ────────────────────────────────────────────────────
 export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) {
+  const { formatPrice } = useCurrency();
 
   // ── モード ───────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<Mode>('pdf');
@@ -1384,7 +1386,7 @@ export function PropertyRegisterPage({ onNavigate }: PropertyRegisterPageProps) 
                           <p className="font-semibold text-gray-900 text-sm break-words line-clamp-2">{prop.title || '（タイトルなし）'}</p>
                           <p className="text-xs text-gray-500 break-words line-clamp-2 mt-0.5">{prop.address}</p>
                           <p className="text-xs text-gray-400 mt-1 break-all">
-                            ¥{prop.price?.toLocaleString()} • {prop.type === 'buy' ? '売買' : '賃貸'} • ID:{prop.id}
+                            {formatPrice(Number(prop.price) || 0, prop.type === 'buy' ? 'buy' : 'rent')} • {prop.type === 'buy' ? '売買' : '賃貸'} • ID:{prop.id}
                           </p>
                         </div>
                       </div>

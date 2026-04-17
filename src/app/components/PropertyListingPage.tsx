@@ -16,7 +16,12 @@ import { QuickPropertySearch } from '@/app/components/QuickPropertySearch';
 import { PropertiesMapView } from '@/app/components/PropertiesMapView';
 import { supabase } from '@/lib/supabase';
 import { addressMatchesWard } from '@/lib/wards';
-import { type Property, type SupabasePropertyRow, mapSupabaseRowToProperty } from '@/lib/properties';
+import {
+  type Property,
+  type SupabasePropertyRow,
+  mapSupabaseRowToProperty,
+  getListingCardImageUrls,
+} from '@/lib/properties';
 import { useCurrency } from '@/app/contexts/CurrencyContext';
 import { filterPropertiesByHeroParams, type HeroSearchParams } from '@/lib/searchFilters';
 import { sortProperties, sortOptions, type SortOption } from '@/lib/sortProperties';
@@ -31,6 +36,58 @@ interface PropertyListingPageProps {
   selectedWard?: string | null;
   onSelectProperty?: (id: number) => void;
   initialSearchParams?: HeroSearchParams;
+}
+
+/** 画像がない物件はヒーロー画像枠を出さず、テキストのみ表示 */
+function ListingCardNoImageBlock({
+  property,
+  displayTitle,
+  displayAddress,
+  showNewBadge,
+  formatPrice,
+  t,
+  language,
+}: {
+  property: Property;
+  displayTitle: string;
+  displayAddress: string;
+  showNewBadge: boolean;
+  formatPrice: (priceYen: number, type: 'rent' | 'buy') => string;
+  t: (key: string) => string;
+  language: string;
+}) {
+  return (
+    <div className="p-4 md:p-5 space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {property.isFeatured && (
+          <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>
+        )}
+        {showNewBadge && (
+          <span className="px-2 py-0.5 bg-gray-900 text-white text-xs font-semibold rounded-full">{t('listing.badge.new')}</span>
+        )}
+      </div>
+      <h3 className="text-base font-bold text-gray-900 line-clamp-2">{displayTitle}</h3>
+      <p className="text-xs text-gray-600 line-clamp-2">{displayAddress}</p>
+      <div className="text-xl font-bold text-[#C1121F]">{formatPrice(property.price, 'buy')}</div>
+      <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
+        <div className="flex items-center gap-1">
+          <Bed className="w-3.5 h-3.5 text-gray-400" />
+          <span className="font-medium">{property.beds}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Maximize2 className="w-3.5 h-3.5 text-gray-400" />
+          <span className="font-medium">{property.size} m²</span>
+        </div>
+        <span className="px-2 py-0.5 bg-gray-100 rounded-full font-medium text-gray-700">{property.layout}</span>
+      </div>
+      <div className="inline-flex items-start gap-1.5 text-xs text-gray-600">
+        <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
+        <span>
+          {getStationDisplay(property.station, language)} • {property.walkingMinutes} {t('property.walk.min')}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export function PropertyListingPage({ selectedWard, onSelectProperty, initialSearchParams }: PropertyListingPageProps = {}) {
@@ -337,11 +394,24 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                   className="group relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer border border-gray-100"
                   whileHover={{ y: -2 }}
                 >
-                  {/* Image - モバイル: メイン大・その他小 / PC: 単一 */}
+                  {/* Image - モバイル: メイン大・その他小 / PC: 単一（画像URLが登録されているときのみ） */}
                   {(() => {
-                    const allImages = (property.images?.length ? property.images : [property.image]) as string[];
-                    const mainImage = allImages[0] ?? property.image;
-                    const otherImages = allImages.slice(1);
+                    const urls = getListingCardImageUrls(property);
+                    if (urls.length === 0) {
+                      return (
+                        <ListingCardNoImageBlock
+                          property={property}
+                          displayTitle={displayTitle}
+                          displayAddress={displayAddress}
+                          showNewBadge={isNewBadge(property)}
+                          formatPrice={formatPrice}
+                          t={t}
+                          language={language}
+                        />
+                      );
+                    }
+                    const mainImage = urls[0];
+                    const otherImages = urls.slice(1);
                     return (
                       <>
                         <div className="md:hidden">
@@ -378,7 +448,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                           )}
                         </div>
                         <div className="hidden md:block relative h-52 w-full overflow-hidden">
-                          <ImageWithFallback src={property.image} alt={displayTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <ImageWithFallback src={mainImage} alt={displayTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
                           <div className="absolute top-2 left-2 flex gap-2 z-10">
                             {property.isFeatured && <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>}
@@ -523,11 +593,24 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                   className="group relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer border border-gray-100"
                   whileHover={{ y: -2 }}
                 >
-                  {/* Image - モバイル: メイン大・その他小 / PC: 単一 */}
+                  {/* Image - モバイル: メイン大・その他小 / PC: 単一（画像URLが登録されているときのみ） */}
                   {(() => {
-                    const allImages = (property.images?.length ? property.images : [property.image]) as string[];
-                    const mainImage = allImages[0] ?? property.image;
-                    const otherImages = allImages.slice(1);
+                    const urls = getListingCardImageUrls(property);
+                    if (urls.length === 0) {
+                      return (
+                        <ListingCardNoImageBlock
+                          property={property}
+                          displayTitle={displayTitle}
+                          displayAddress={displayAddress}
+                          showNewBadge={isNewBadge(property)}
+                          formatPrice={formatPrice}
+                          t={t}
+                          language={language}
+                        />
+                      );
+                    }
+                    const mainImage = urls[0];
+                    const otherImages = urls.slice(1);
                     return (
                       <>
                         <div className="md:hidden">
@@ -564,7 +647,7 @@ export function PropertyListingPage({ selectedWard, onSelectProperty, initialSea
                           )}
                         </div>
                         <div className="hidden md:block relative h-52 w-full overflow-hidden">
-                          <ImageWithFallback src={property.image} alt={displayTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                          <ImageWithFallback src={mainImage} alt={displayTitle} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
                           <div className="absolute top-2 left-2 flex gap-2 z-10">
                             {property.isFeatured && <span className="px-2 py-0.5 bg-[#C1121F] text-white text-xs font-semibold rounded-full">{t('listing.badge.popular')}</span>}

@@ -1,4 +1,5 @@
 import { toDirectImageUrl } from './propertyImageUrl';
+import { formatJpyPriceDisplay } from './formatJpyPrice';
 
 /**
  * Supabase の properties テーブルから返る行（snake_case）
@@ -97,6 +98,20 @@ export interface Property {
   planningArea?: string;
   /** DB の land_area_sqm（㎡）。無い場合は土地面積フィルタで size にフォールバック */
   landAreaSqm?: number;
+}
+
+/**
+ * 一覧カード等で使う画像URL（先頭から利用）。`images` に有効なURLがあればその順、なければ空でない `image` のみ。
+ */
+export function getListingCardImageUrls(property: Pick<Property, 'image' | 'images'>): string[] {
+  if (property.images && property.images.length > 0) {
+    const filtered = property.images.filter((u): u is string => typeof u === 'string' && u.trim() !== '');
+    if (filtered.length > 0) return filtered;
+  }
+  if (typeof property.image === 'string' && property.image.trim() !== '') {
+    return [property.image.trim()];
+  }
+  return [];
 }
 
 /**
@@ -315,7 +330,7 @@ export function mapSupabaseRowToFeaturedProperty(row: SupabasePropertyRow | Reco
   const typeVal = String(get(r, 'type') ?? 'rent').toLowerCase();
   const type = typeVal === 'rent' ? 'Rent' : 'Buy';
   const price = Number(get(r, 'price') ?? 0);
-  const priceStr = typeVal === 'rent' ? `¥${price.toLocaleString()}/mo` : `¥${price.toLocaleString()}`;
+  const priceStr = formatJpyPriceDisplay(price, typeVal === 'rent' ? 'rent' : 'buy');
   const pdfPathRaw = get(r, 'source_pdf_path', 'sourcePdfPath');
   const sourcePdfPath = pdfPathRaw != null && String(pdfPathRaw).trim() !== '' ? String(pdfPathRaw) : undefined;
   return {
